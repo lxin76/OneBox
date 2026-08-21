@@ -1,0 +1,22 @@
+# 构建产物
+bin/
+obj/
+publish/
+*.user
+
+# 开发调试临时目录（仅根目录，docs/screenshots 用于 README 配图，需跟踪）
+/screenshots/
+/scripts/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.userosscache
+
+# 日志
+*.log
+
+# 系统文件
+Thumbs.db
+Desktop.ini
