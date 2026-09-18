@@ -47,6 +47,37 @@
             <Setter Property="FontSize" Value="11"/>
         </Style>
 
+        <!-- 剪贴板监听开关（滑动开关样式：开=绿色滑块靠右，关=灰色滑块靠左） -->
+        <Style x:Key="SwitchToggle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Track" CornerRadius="9" Background="#33FFFFFF"
+                                BorderBrush="#40FFFFFF" BorderThickness="1">
+                            <Ellipse x:Name="Thumb" Width="12" Height="12" Fill="#8A90A6"
+                                     HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#3DD68A"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#3DD68A"/>
+                                <Setter TargetName="Thumb" Property="Fill" Value="#FFFFFF"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,2,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#B0FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SearchBox" TargetType="TextBox">
             <Setter Property="Background" Value="#1FFFFFFF"/>
             <Setter Property="BorderBrush" Value="#3DFFFFFF"/>
@@ -133,6 +164,12 @@
                            Foreground="#9AA0B4" FontSize="11" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"/>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,10,0">
+                    <TextBlock x:Name="MonitorLabel" Text="监听" Foreground="#9AA0B4" FontSize="11"
+                               VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <ToggleButton x:Name="MonitorToggle" Style="{StaticResource SwitchToggle}"
+                                  VerticalAlignment="Center" Margin="0,0,8,0"
+                                  ToolTip="剪贴板监听：开（点击暂停）"
+                                  Checked="OnMonitorToggleChanged" Unchecked="OnMonitorToggleChanged"/>
                     <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#x1F4CC;"
                             ToolTip="取消置顶" Click="OnPinClick"/>
                     <Button x:Name="ExpandButton" Style="{StaticResource IconButton}" Content="&#x25BE;"

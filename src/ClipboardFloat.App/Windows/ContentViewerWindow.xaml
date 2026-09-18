@@ -43,8 +43,71 @@
                     Content="&#x1F4CC;" ToolTip="置顶" Click="OnPinClick"/>
             <Button x:Name="CopyButton" DockPanel.Dock="Right" Content="复制全部"
                     Margin="0,0,8,0" Click="OnCopyClick"/>
+            <Button x:Name="JsonPanelButton" DockPanel.Dock="Right" Content="属性"
+                    Margin="0,0,8,0" Visibility="Collapsed" Opacity="0.5"
+                    ToolTip="显示/隐藏 JSON 属性面板" Click="OnToggleJsonPanel"/>
             <TextBlock x:Name="TypeText" VerticalAlignment="Center" Foreground="#8A90A6"/>
         </DockPanel>
+
+        <!-- 选中提示：双击=智能选中同段内容，Ctrl+双击逐层扩大 -->
+        <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="0,6,0,0"
+                   Foreground="#8A90A6" FontSize="11" TextWrapping="Wrap"
+                   Text="双击=智能选中同段内容 · Ctrl+双击继续扩大"/>
+
+        <!-- JSON 属性面板：单击复制值 / 双击复制路径 / 右键更多 -->
+        <Border x:Name="JsonPanel" DockPanel.Dock="Bottom" Visibility="Collapsed"
+                Background="#14FFFFFF" CornerRadius="8" Padding="8,6" Margin="0,8,0,0" Height="150">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" FontSize="11" Foreground="#8A90A6" Margin="0,0,0,4"
+                           Text="JSON 属性（单击复制值 · 双击复制路径 · 右键更多）"/>
+                <ListBox x:Name="JsonList" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         PreviewMouseLeftButtonDown="OnJsonListPreviewMouseLeftButtonDown"
+                         ContextMenuOpening="OnJsonListContextMenuOpening">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="3,1"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#1FFFFFFF"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#332E9EFF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ToolTip="{Binding PairText}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Key}" FontSize="11" Foreground="#9AA0B4"
+                                           Margin="0,0,8,0" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayValue}" FontSize="12"
+                                           Foreground="#E6E8F0" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
 
         <!-- 内容区：Grid 约束宽度 → 文本自动换行；仅垂直滚动条 -->
         <Grid>
@@ -52,7 +115,8 @@
                      Background="Transparent" BorderThickness="0" Foreground="#E6E8F0"
                      FontSize="12" Padding="0" Margin="0,0,2,0"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     PreviewMouseLeftButtonDown="OnContentPreviewMouseLeftButtonDown"/>
             <ScrollViewer x:Name="ImageScroller" Visibility="Collapsed"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">

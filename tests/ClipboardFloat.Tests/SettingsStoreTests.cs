@@ -23,6 +23,7 @@ public class SettingsStoreTests
         var settings = SettingsStore.Load(Path.Combine(_dir, "none.json"));
         Assert.True(settings.AutoPaste);
         Assert.True(settings.Pinned);
+        Assert.False(settings.MonitoringEnabled);   // 监听默认关闭
         Assert.Equal(500, settings.MaxHistory);
         Assert.Equal("Ctrl+Alt+V", settings.PanelHotkey);
         Assert.Equal("Ctrl+Alt+P", settings.PasteHotkey);
@@ -37,6 +38,7 @@ public class SettingsStoreTests
         {
             AutoPaste = false,
             Pinned = false,
+            MonitoringEnabled = true,   // 与默认值相反，验证确实写盘并读回
             MaxHistory = 123,
             PanelHotkey = "Ctrl+Alt+Q",
             PasteHotkey = "Ctrl+Shift+Z",
@@ -47,6 +49,7 @@ public class SettingsStoreTests
         var loaded = SettingsStore.Load(path);
         Assert.False(loaded.AutoPaste);
         Assert.False(loaded.Pinned);
+        Assert.True(loaded.MonitoringEnabled);
         Assert.Equal(123, loaded.MaxHistory);
         Assert.Equal("Ctrl+Alt+Q", loaded.PanelHotkey);
         Assert.Equal("Ctrl+Shift+Z", loaded.PasteHotkey);

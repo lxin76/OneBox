@@ -9,6 +9,10 @@ public sealed class Settings
     /// <summary>悬浮窗启动时是否置顶。</summary>
     public bool Pinned { get; set; } = true;
 
+    /// <summary>是否监听剪贴板。默认关闭：不注册剪贴板监听器，也不记录任何新的复制内容，
+    /// 需要时用悬浮条上的“监听”开关（或托盘菜单/设置页）手动开启。</summary>
+    public bool MonitoringEnabled { get; set; }
+
     /// <summary>历史条数上限（超出裁剪最旧）。</summary>
     public int MaxHistory { get; set; } = 500;
 

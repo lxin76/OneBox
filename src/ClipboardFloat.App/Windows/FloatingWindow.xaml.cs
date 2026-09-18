@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -18,6 +19,8 @@ public partial class FloatingWindow : Window
 {
     private const string AutoPasteOnTip = "自动粘贴：开（点击条目后自动粘贴到前台窗口）";
     private const string AutoPasteOffTip = "自动粘贴：关（点击仅复制）";
+    private const string MonitoringOnTip = "剪贴板监听：开（点击暂停，暂停后不再记录新的复制内容）";
+    private const string MonitoringOffTip = "剪贴板监听：关（点击开启）";
 
     private readonly DispatcherTimer _topmostTimer;
     private readonly DispatcherTimer _autoCollapseTimer;
@@ -53,6 +56,7 @@ public partial class FloatingWindow : Window
         ApplyPinned(_pinned);
         AutoPasteButton.Opacity = App.CurrentSettings.AutoPaste ? 1.0 : 0.5;
         AutoPasteButton.ToolTip = App.CurrentSettings.AutoPaste ? AutoPasteOnTip : AutoPasteOffTip;
+        ApplyMonitoringState(App.CurrentSettings.MonitoringEnabled);
         HintText.Text = $"{App.CurrentSettings.PanelHotkey} 呼出历史 · 不抢焦点";
 
         // 定时器：仅置顶时才重申置顶（防止被其他置顶窗口盖住）；
@@ -196,6 +200,36 @@ public partial class FloatingWindow : Window
         TopmostService.SetNoActivate(this, on: pinned);
         PinButton.Opacity = pinned ? 1.0 : 0.5;
         PinButton.ToolTip = pinned ? "取消置顶" : "恢复置顶";
+    }
+
+    /// <summary>请求开启/关闭剪贴板监听（由 App 层执行真正的注册/注销与持久化）。</summary>
+    public event Action<bool>? MonitoringToggleRequested;
+
+    /// <summary>程序化同步开关状态中，忽略随之而来的 Checked/Unchecked 事件。</summary>
+    private bool _syncingMonitorToggle;
+
+    /// <summary>刷新监听开关外观（悬浮条开关、托盘菜单、设置页任一入口修改后统一调用）。</summary>
+    public void ApplyMonitoringState(bool enabled)
+    {
+        if (MonitorToggle.IsChecked != enabled)
+        {
+            _syncingMonitorToggle = true;
+            MonitorToggle.IsChecked = enabled;
+            _syncingMonitorToggle = false;
+        }
+        MonitorToggle.ToolTip = enabled ? MonitoringOnTip : MonitoringOffTip;
+        MonitorLabel.Foreground = enabled
+            ? new SolidColorBrush(Color.FromRgb(0x7C, 0xE3, 0x8B))
+            : new SolidColorBrush(Color.FromRgb(0x9A, 0xA0, 0xB4));
+    }
+
+    /// <summary>开关被用户点击（或无障碍工具切换）后：立即反馈，再由 App 同步真实监听状态。</summary>
+    private void OnMonitorToggleChanged(object sender, RoutedEventArgs e)
+    {
+        if (_syncingMonitorToggle) return;
+        var enabled = MonitorToggle.IsChecked == true;
+        ApplyMonitoringState(enabled);
+        MonitoringToggleRequested?.Invoke(enabled);
     }
 
     /// <summary>打开设置窗口（图钉旁 ⚙ 与托盘菜单共用）。</summary>
@@ -487,7 +521,7 @@ public partial class FloatingWindow : Window
     {
         if (e.ChangedButton != MouseButton.Left) return;
         var src = e.OriginalSource as DependencyObject;
-        if (FindParent<Button>(src) is not null) return;
+        if (FindParent<ButtonBase>(src) is not null) return;
         if (FindParent<ListBoxItem>(src) is not null) return;
 
         _dragStart = e.GetPosition(this);

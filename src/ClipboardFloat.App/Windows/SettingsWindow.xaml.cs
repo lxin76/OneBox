@@ -43,6 +43,7 @@ public partial class SettingsWindow : Window
         PinnedCheck.IsChecked = settings.Pinned;
         _loading = true;
         AutoStartCheck.IsChecked = AutoStartService.IsEnabled(); // 以注册表为准
+        MonitorCheck.IsChecked = settings.MonitoringEnabled;
         _loading = false;
         MaxHistoryBox.Text = settings.MaxHistory.ToString();
         DataDirText.Text = "数据目录：" + AppPaths.DataDirectory;
@@ -75,6 +76,13 @@ public partial class SettingsWindow : Window
         _settings.Pinned = PinnedCheck.IsChecked == true;
         _floatingWindow.ApplyPinned(_settings.Pinned);
         Save();
+    }
+
+    /// <summary>监听开关：交给 App 层统一注册/注销剪贴板监听器（同时刷新悬浮条开关与托盘勾选）。</summary>
+    private void OnMonitorChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        (Application.Current as App)?.SetMonitoring(MonitorCheck.IsChecked == true);
     }
 
     private void OnAutoStartChanged(object sender, RoutedEventArgs e)

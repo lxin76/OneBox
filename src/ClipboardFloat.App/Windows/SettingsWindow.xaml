@@ -60,6 +60,8 @@
                   Checked="OnAutoPasteChanged" Unchecked="OnAutoPasteChanged"/>
         <CheckBox x:Name="PinnedCheck" Content="悬浮窗置顶（始终保持在上层）"
                   Checked="OnPinnedChanged" Unchecked="OnPinnedChanged"/>
+        <CheckBox x:Name="MonitorCheck" Content="监听剪贴板（关闭后不记录新的复制内容）"
+                  Checked="OnMonitorChanged" Unchecked="OnMonitorChanged"/>
         <CheckBox x:Name="AutoStartCheck" Content="开机自动启动"
                   Checked="OnAutoStartChanged" Unchecked="OnAutoStartChanged"/>
         <TextBlock x:Name="AutoStartTip" Foreground="#8A90A6" FontSize="11" Margin="22,0,0,6" TextWrapping="Wrap"/>

@@ -18,6 +18,7 @@ public partial class App : Application
     public static Settings CurrentSettings { get; private set; } = new();
 
     private TaskbarIcon? _tray;
+    private MenuItem? _monitorMenuItem;
     private FloatingWindow? _floatingWindow;
     private FloatingViewModel? _viewModel;
     private ClipboardWatcher? _clipboardWatcher;
@@ -55,21 +56,25 @@ public partial class App : Application
             // 先 Show() 创建窗口句柄（触发 SourceInitialized），再挂剪贴板监听
             _floatingWindow.Show();
 
-            _clipboardWatcher = new ClipboardWatcher(_floatingWindow);
+            _clipboardWatcher = new ClipboardWatcher(_floatingWindow, startListening: CurrentSettings.MonitoringEnabled);
             _clipboardWatcher.ItemCaptured += OnItemCaptured;
             _viewModel.CopyRequested += OnCopyRequested;
             _floatingWindow.MarkSelfWriteAction = () => _clipboardWatcher.MarkSelfWrite();
             _floatingWindow.ViewSelectedRequested += OnViewSelectedRequested;
+            _floatingWindow.MonitoringToggleRequested += SetMonitoring;
 
-            // 启动时捕获一次当前剪贴板，让历史面板初始不空
-            try
+            // 启动时捕获一次当前剪贴板，让历史面板初始不空（监听关闭时不读取）
+            if (CurrentSettings.MonitoringEnabled)
             {
-                var initial = ClipboardSnapshot.Capture();
-                if (initial is not null) _viewModel.AddItem(initial);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Write($"初始捕获失败: {ex.Message}");
+                try
+                {
+                    var initial = ClipboardSnapshot.Capture();
+                    if (initial is not null) _viewModel.AddItem(initial);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"初始捕获失败: {ex.Message}");
+                }
             }
         }
         catch (Exception ex)
@@ -83,6 +88,20 @@ public partial class App : Application
     {
         _viewModel?.AddItem(item);
         AppLog.Write($"捕获剪贴板: {item.Kind} {item.Hash[..Math.Min(8, item.Hash.Length)]}");
+    }
+
+    /// <summary>开启/关闭剪贴板监听（悬浮窗开关、托盘菜单、设置页共用入口）。
+    /// 关闭时注销监听器，系统不再投递剪贴板更新消息，完全不记录新的复制内容。</summary>
+    public void SetMonitoring(bool enabled)
+    {
+        CurrentSettings.MonitoringEnabled = enabled;
+        SettingsStore.Save(CurrentSettings);
+
+        if (enabled) _clipboardWatcher?.Start();
+        else _clipboardWatcher?.Stop();
+
+        _floatingWindow?.ApplyMonitoringState(enabled);
+        if (_monitorMenuItem is not null) _monitorMenuItem.IsChecked = enabled;
     }
 
     private void OnCopyRequested(CopyRequest req)
@@ -134,6 +153,10 @@ public partial class App : Application
     {
         if (_clipboardWatcher is null || _floatingWindow is null) return;
 
+        // 监听暂停时，为完成这次显式操作临时开启监听，取到内容后立即恢复暂停
+        var resumePaused = !_clipboardWatcher.IsListening;
+        if (resumePaused) _clipboardWatcher.Start();
+
         Action<ClipItem>? handler = null;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
 
@@ -141,6 +164,7 @@ public partial class App : Application
         {
             _clipboardWatcher.ItemCaptured -= handler!;
             timer.Stop();
+            if (resumePaused) _clipboardWatcher.Stop();
             _floatingWindow!.OpenPinnedViewer(item);
             AppLog.Write("悬浮查看：已打开置顶查看窗口");
         };
@@ -148,6 +172,7 @@ public partial class App : Application
         {
             _clipboardWatcher.ItemCaptured -= handler!;
             timer.Stop();
+            if (resumePaused) _clipboardWatcher.Stop();
             AppLog.Write("悬浮查看：复制超时（可能没有选中内容）");
         };
 
@@ -167,6 +192,14 @@ public partial class App : Application
 
         var show = new MenuItem { Header = "显示/隐藏悬浮窗" };
         show.Click += (_, _) => ToggleWindow();
+        _monitorMenuItem = new MenuItem
+        {
+            Header = "监听剪贴板（关闭后暂停记录）",
+            IsCheckable = true,
+            IsChecked = CurrentSettings.MonitoringEnabled,
+        };
+        _monitorMenuItem.Click += (_, _) => SetMonitoring(_monitorMenuItem.IsChecked);
+
         var settings = new MenuItem { Header = "设置…" };
         settings.Click += (_, _) => _floatingWindow?.OpenSettings();
         var clear = new MenuItem { Header = "清空历史" };
@@ -178,6 +211,7 @@ public partial class App : Application
 
         var menu = new ContextMenu();
         menu.Items.Add(show);
+        menu.Items.Add(_monitorMenuItem);
         menu.Items.Add(settings);
         menu.Items.Add(clear);
         menu.Items.Add(resetKeys);

@@ -16,7 +16,10 @@
 - **单击即粘贴**：点击历史条目 → 自动写入剪贴板并 `Ctrl+V` 到前台窗口（可切换为"仅复制"）
 - **一键悬浮查看选中内容**：在任意编辑器选中文字 → `Ctrl+Alt+C` → 自动复制并打开**自动置顶**的完整内容查看窗口
 - **完整内容查看窗口**：默认 300×300、自动换行、垂直滚动、支持置顶与复制
+- **智能同段选中**：查看窗口双击不再只选中一两个字符——按“字符串值 → `"key": value` 属性对 → 整行 → 整个 `{…}` 区块 → 全文”逐层命中，`Ctrl+双击` 在同一位置继续向外扩一层
+- **JSON 属性面板**：内容识别为 JSON 对象/数组时，自动列出全部「属性路径 = 值」（嵌套用 `a.b[0].c`），单击复制值、双击复制路径、右键可复制 `"key": value` 片段，无需手选
 - **多格式剪贴板**：文本 / HTML / RTF / 图片 / 文件列表，事件驱动监听（`AddClipboardFormatListener`，零轮询）
+- **监听开关**：窄条上的滑动开关一键开启/暂停剪贴板监听；**默认关闭**（不注册监听器、不记录任何复制内容），需要时手动开启。关闭时系统不再投递剪贴板消息，**完全不记录**任何新的复制内容（托盘菜单与设置页同样可切换；状态持久化，重启后保持）
 - **去重与搜索**：内容哈希去重（重复复制自动置顶条目）、历史实时搜索过滤
 - **拖拽**：把历史条目直接拖到任意目标软件
 - **SQLite 持久化**：历史与设置保存在 `%LOCALAPPDATA%\ClipboardFloat\`，重启不丢失
@@ -52,6 +55,7 @@
 | 操作 | 行为 |
 |---|---|
 | 单击条目（图标区） | 复制 + 自动粘贴（窄条 ⏎ 按钮可切换自动粘贴） |
+| 点击窄条「监听」开关 | 开启/暂停剪贴板监听（关闭后不记录任何新的复制内容） |
 | `Ctrl`+单击 | 仅复制 |
 | 点击条目右侧 👁 | 快速打开完整内容查看窗口 |
 | 点击条目预览文字 | 选中部分文字，`Ctrl+C` 复制选中部分 |
@@ -59,12 +63,16 @@
 | 拖拽条目 | 拖到任意目标软件 |
 | 双击托盘图标 | 唤醒并临时置顶展示（与置顶设置无关） |
 | 搜索框 | 输入过滤，`Esc` 关闭并归还焦点 |
+| 查看窗口双击文本 | 智能选中同段内容（字符串值 / 数值 / 整行） |
+| 查看窗口 `Ctrl`+双击 | 在同一位置逐层向外扩大（属性对 → 整行 → 区块 → 全文） |
+| 查看窗口 JSON 属性行 | 单击复制该属性的值，双击复制属性路径，右键更多 |
 
 ## 项目结构
 
 ```
 src/ClipboardFloat.Core/   net8.0 纯逻辑库（可单测）
   ClipItem / ClipboardHistory / ClipboardHtml / ClipboardText
+  SmartTextSelector（智能同段选中）/ JsonPropertyList（JSON 属性展开）
   HistoryStore (SQLite) / Settings / SettingsStore / AppPaths / HotkeyParser
 src/ClipboardFloat.App/    net8.0-windows WPF 主程序
   Windows/FloatingWindow   悬浮窗（窄条 + 历史面板）
@@ -72,7 +80,7 @@ src/ClipboardFloat.App/    net8.0-windows WPF 主程序
   Services/  ClipboardWatcher / ClipboardSnapshot / ClipboardWriter / PasteService
              HotkeyService / HotkeyRecorder / TopmostService / AutoStartService / AppLog
   ViewModels/ FloatingViewModel / ClipItemViewModel
-tests/ClipboardFloat.Tests/ 58 个单元测试
+tests/ClipboardFloat.Tests/ 81 个单元测试
 ```
 
 ## 技术要点
