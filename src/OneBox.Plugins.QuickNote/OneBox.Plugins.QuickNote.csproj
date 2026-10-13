@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>OneBox.Plugins.QuickNote</AssemblyName>
+    <RootNamespace>OneBox.Plugins.QuickNote</RootNamespace>
+    <Description>OneBox 示例小工具：同时可作为编写新插件的模板。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- IDisposable 测试类清理方法（xUnit1013 误报） -->
+    <NoWarn>$(NoWarn);xUnit1013</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Host\OneBox.Host.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.Clipboard.Core\OneBox.Plugins.Clipboard.Core.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.Clipboard\OneBox.Plugins.Clipboard.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
+  </ItemGroup>
+
+</Project>

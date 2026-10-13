@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- 带 Windows SDK 版本的 TFM 才能使用 Windows.Media.Ocr（文本识别） -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>OneBox.Plugins.Screenshot</AssemblyName>
+    <RootNamespace>OneBox.Plugins.Screenshot</RootNamespace>
+    <Description>OneBox 截图小工具：全屏/区域/滚动截长图，贴图置顶，保存与文字识别。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
+  </ItemGroup>
+
+</Project>

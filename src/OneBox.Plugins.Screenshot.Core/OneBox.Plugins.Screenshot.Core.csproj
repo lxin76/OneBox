@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>OneBox.Plugins.Screenshot.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 设置声明用到的 SettingDescriptor / SettingKind 定义在协议层 -->
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,237 @@
+<Window x:Class="OneBox.Host.Windows.ToolboxWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="OneBox 工具箱"
+        Icon="pack://application:,,,/Assets/app.ico"
+        Width="820" Height="620" MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterScreen"
+        Background="#16162A" Foreground="#E6E8F0" FontSize="12">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#2E2E48"/>
+            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#B8BDD0"/>
+            <Setter Property="Padding" Value="14,6"/>
+        </Style>
+
+        <Style x:Key="Badge" TargetType="Border">
+            <Setter Property="Background" Value="#2A2A44"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#8A90A6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部：标题与全局操作 -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="OneBox 小工具平台" FontSize="17" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                <TextBlock x:Name="SummaryText" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="安装小工具…" Click="OnInstallClick" Margin="0,0,8,0" VerticalAlignment="Top"/>
+            <Button Grid.Column="2" Content="打开插件目录" Click="OnOpenPluginsDir" VerticalAlignment="Top"/>
+        </Grid>
+
+        <TabControl Grid.Row="1" Background="#16162A" BorderBrush="#2E2E48">
+            <TabItem Header="小工具">
+                <Grid Margin="4,10,4,4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <ListBox x:Name="PluginList" Grid.Row="0"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             HorizontalContentAlignment="Stretch">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,0,8"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#1E1E36" BorderBrush="#2E2E48" BorderThickness="1"
+                                        CornerRadius="8" Padding="14,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                           Foreground="#F2F2F2" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding VersionText}" Style="{StaticResource Hint}"
+                                                           Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                <Border Style="{StaticResource Badge}" Margin="8,0,0,0">
+                                                    <TextBlock Text="{Binding SourceText}" FontSize="10" Foreground="#9AB4FF"/>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Hint}"
+                                                       Margin="0,6,0,0"/>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <TextBlock Text="状态：" Style="{StaticResource Hint}"/>
+                                                <TextBlock Text="{Binding StateText}" FontSize="11" Foreground="#7CE38B"
+                                                           Margin="0,0,10,0"/>
+                                                <TextBlock Text="{Binding StatusText}" Style="{StaticResource Hint}"/>
+                                            </StackPanel>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="热键：" Style="{StaticResource Hint}"/>
+                                                <TextBlock Text="{Binding HotkeyText}" Style="{StaticResource Hint}"/>
+                                            </StackPanel>
+
+                                            <TextBlock Text="{Binding CrashText}" Style="{StaticResource Hint}"
+                                                       Foreground="#FFB454" Margin="0,4,0,0"
+                                                       Visibility="{Binding HasCrashInfo, Converter={StaticResource BoolToVisibility}}"/>
+
+                                            <TextBlock Text="{Binding ErrorText}" Style="{StaticResource Hint}"
+                                                       Foreground="#FF9A9A" Margin="0,4,0,0"
+                                                       Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                            <CheckBox Content="启用" IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                      IsEnabled="{Binding IsBroken, Converter={StaticResource InverseBool}}"
+                                                      Margin="0,0,10,0"/>
+                                            <Button Content="重启" Click="OnRestartClick"
+                                                    IsEnabled="{Binding CanRestart}" Margin="0,0,6,0"/>
+                                            <Button Content="卸载" Click="OnUninstallClick"
+                                                    IsEnabled="{Binding CanUninstall}" Foreground="#FF9A9A"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <TextBlock x:Name="EmptyHint" Grid.Row="0" Style="{StaticResource Hint}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"
+                               Text="还没有安装任何小工具。点击右上角『安装小工具…』选择一个插件目录或 .zip 包。"
+                               Visibility="Collapsed"/>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="热键">
+                <StackPanel Margin="8,12,8,8">
+                    <TextBlock Text="所有小工具的全局热键都由宿主统一注册，因此能显示互相冲突的项。"
+                               Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                    <ItemsControl x:Name="HotkeyList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#1E1E36" BorderBrush="#2E2E48" BorderThickness="1"
+                                        CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Combination}" FontFamily="Consolas"
+                                                   Foreground="#F2F2F2" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Description}"
+                                                   Style="{StaticResource Hint}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="NoHotkeyHint" Text="当前没有小工具声明全局热键。"
+                               Style="{StaticResource Hint}"/>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="目录与日志">
+                <StackPanel Margin="8,12,8,8">
+                    <TextBlock Text="插件目录" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                    <TextBlock x:Name="PluginsDirText" Style="{StaticResource Hint}" Margin="0,4,0,10"/>
+                    <TextBlock Text="插件数据目录（每个小工具的私有设置保存在这里）" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                    <TextBlock x:Name="DataDirText" Style="{StaticResource Hint}" Margin="0,4,0,10"/>
+                    <TextBlock Text="日志目录" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                    <TextBlock x:Name="LogDirText" Style="{StaticResource Hint}" Margin="0,4,0,12"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="打开插件目录" Click="OnOpenPluginsDir" Margin="0,0,8,0"/>
+                        <Button Content="打开数据目录" Click="OnOpenDataDir" Margin="0,0,8,0"/>
+                        <Button Content="打开日志目录" Click="OnOpenLogDir"/>
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Content="刷新" Click="OnRefreshClick" Margin="0,0,8,0"/>
+            <Button Content="全部启动" Click="OnStartAllClick" Margin="0,0,8,0"/>
+            <Button Content="全部停止" Click="OnStopAllClick"/>
+            <TextBlock x:Name="FooterHint" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

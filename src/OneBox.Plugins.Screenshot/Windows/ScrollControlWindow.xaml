@@ -1,0 +1,57 @@
+<Window x:Class="OneBox.Plugins.Screenshot.Windows.ScrollControlWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="滚动截图"
+        SizeToContent="WidthAndHeight" WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" ShowInTaskbar="False" Topmost="True"
+        ResizeMode="NoResize" WindowStartupLocation="Manual"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Background" Value="#2E2E48"/>
+            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#F0181828" BorderBrush="#553B82F6" BorderThickness="1"
+            CornerRadius="10" Padding="14,10">
+        <StackPanel>
+            <TextBlock Text="滚动截长图" FontSize="13" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+            <TextBlock x:Name="StatusText" Foreground="#B9BFD0" FontSize="11" Margin="0,4,0,0"
+                       Text="正在滚动，请勿移动鼠标…" MaxWidth="300" TextWrapping="Wrap"/>
+            <ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Width="260"
+                         Minimum="0" Maximum="100" Value="0"
+                         Background="#2E2E48" Foreground="#3B82F6" BorderThickness="0"/>
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" HorizontalAlignment="Right">
+                <Button x:Name="StopButton" Content="完成并保存" Click="OnStopClick"
+                        Style="{StaticResource LinkButton}"/>
+                <Button x:Name="CancelButton" Content="取消" Click="OnCancelClick" Margin="8,0,0,0"
+                        Style="{StaticResource LinkButton}"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,9 @@
+{
+  "id": "quicknote",
+  "name": "快速便签",
+  "version": "1.0.0",
+  "description": "示例小工具：热键呼出一个置顶便签窗，内容自动保存。可作为编写新插件的模板。",
+  "author": "OneBox",
+  "entry": "OneBox.Plugins.QuickNote.exe",
+  "protocolVersion": 1
+}

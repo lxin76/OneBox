@@ -1,0 +1,100 @@
+<Window x:Class="OneBox.Plugins.Screenshot.Windows.PinWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="贴图"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Window.Resources>
+        <!-- 工具条按钮：深色底、悬停高亮 -->
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolSeparator" TargetType="Rectangle">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Fill" Value="#3DFFFFFF"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder" BorderBrush="#803B82F6" BorderThickness="1"
+            Background="#F01B1B2F">
+        <Grid>
+            <!-- 图片本体 -->
+            <Image x:Name="ShotImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+
+            <!-- 文字选择高亮层：矩形由 OcrLayout 按字符槽算出，与命中测试同源。
+                 IsHitTestVisible=False 让鼠标事件照常冒泡到窗口级处理。 -->
+            <Canvas x:Name="HighlightLayer" IsHitTestVisible="False"/>
+
+            <!-- 悬浮工具条：平时半透明，鼠标移入才完全显示 -->
+            <Border x:Name="Toolbar" VerticalAlignment="Top" HorizontalAlignment="Center"
+                    Margin="0,10,0,0" Background="#E6181828" CornerRadius="9"
+                    Padding="5,4" Opacity="0.28"
+                    MouseEnter="OnToolbarMouseEnter" MouseLeave="OnToolbarMouseLeave">
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="PinButton" Style="{StaticResource ToolButton}" Content="&#x1F4CC;"
+                            ToolTip="置顶：保持图片浮在所有窗口最上方（Alt+T 切换）" Click="OnToggleTopmost"/>
+                    <Button x:Name="ClosePinsButton" Style="{StaticResource ToolButton}" Content="&#x2715;"
+                            ToolTip="关闭本贴图（Esc）" Click="OnCloseClick"/>
+                    <Rectangle Style="{StaticResource ToolSeparator}"/>
+                    <Button x:Name="CopyButton" Style="{StaticResource ToolButton}" Content="&#x1F4CB;"
+                            ToolTip="复制图片到剪贴板（Alt+C）" Click="OnCopyClick"/>
+                    <Button x:Name="SaveButton" Style="{StaticResource ToolButton}" Content="&#x1F4BE;"
+                            ToolTip="保存到文件（Alt+S）" Click="OnSaveClick"/>
+                    <Button x:Name="OcrButton" Style="{StaticResource ToolButton}" Content="&#x1F524;"
+                            ToolTip="识别图中文字（Alt+O）" Click="OnOcrClick"/>
+                    <Button x:Name="SelectTextButton" Style="{StaticResource ToolButton}" Content="&#x1F4DD;"
+                            ToolTip="选择文字：在图上拖动划选，松开即复制（Alt+X）" Click="OnToggleTextSelect"/>
+                    <Rectangle Style="{StaticResource ToolSeparator}"/>
+                    <Button x:Name="ResetZoomButton" Style="{StaticResource ToolButton}" Content="&#x21BA;"
+                            ToolTip="恢复原始大小（Alt+0）" Click="OnResetZoomClick"/>
+                    <Button x:Name="OpenButton" Style="{StaticResource ToolButton}" Content="&#x2197;"
+                            ToolTip="用默认看图程序打开（Alt+Enter）" Click="OnOpenInViewerClick"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 左上角小标题：显示尺寸与缩放 -->
+            <Border x:Name="InfoBadge" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="10,10,0,0" Background="#C6181828" CornerRadius="6" Padding="7,2"
+                    IsHitTestVisible="False">
+                <TextBlock x:Name="InfoText" Foreground="#D8DCE8" FontSize="11"/>
+            </Border>
+
+            <!-- 右下角缩放手柄 -->
+            <Border x:Name="ResizeHandle" Width="18" Height="18" HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom" Background="#30000000" CornerRadius="0,0,6,0"
+                    Cursor="SizeNWSE" MouseLeftButtonDown="OnResizeStart">
+                <Path Data="M 2,16 L 16,2 M 8,16 L 16,8" Stroke="#C0C6D8" StrokeThickness="1.4"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

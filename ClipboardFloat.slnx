@@ -1,9 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/ClipboardFloat.App/ClipboardFloat.App.csproj" />
-    <Project Path="src/ClipboardFloat.Core/ClipboardFloat.Core.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/ClipboardFloat.Tests/ClipboardFloat.Tests.csproj" />
-  </Folder>
-</Solution>

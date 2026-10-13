@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>OneBox.Plugin.Sdk</RootNamespace>
+    <Description>OneBox 小工具插件开发包：连接宿主、声明热键与托盘菜单、读写插件私有设置、上报日志。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 让单元测试能构造 PluginContext，直接验证它与宿主的通信契约 -->
+    <InternalsVisibleTo Include="OneBox.Tests" />
+  </ItemGroup>
+
+</Project>

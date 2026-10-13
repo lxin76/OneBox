@@ -1,0 +1,9 @@
+{
+  "id": "screenshot",
+  "name": "截图",
+  "version": "1.0.0",
+  "description": "全屏/区域/滚动截长图，贴图置顶不被遮挡，一键保存与文字识别。",
+  "author": "OneBox",
+  "entry": "OneBox.Plugins.Screenshot.exe",
+  "protocolVersion": 1
+}

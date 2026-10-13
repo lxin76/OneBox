@@ -1,0 +1,9 @@
+{
+  "id": "clipboard",
+  "name": "剪贴板",
+  "version": "1.0.0",
+  "description": "常驻置顶悬浮剪贴板：单击条目自动粘贴、悬浮查看选中内容、JSON 属性面板、历史搜索与持久化。",
+  "author": "OneBox",
+  "entry": "OneBox.Plugins.Clipboard.exe",
+  "protocolVersion": 1
+}
