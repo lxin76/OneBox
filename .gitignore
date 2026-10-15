@@ -20,3 +20,11 @@ publish/
 # 系统文件
 Thumbs.db
 Desktop.ini
+
+# 图标生成器的产物（母版与检查图可由 tools/icons/gen_icons.py 随时重建）
+tools/icons/master/
+tools/icons/check-*.png
+__pycache__/
+
+# 运行时数据（便携模式：全部在安装目录内的 data/，不应入库）
+/data/

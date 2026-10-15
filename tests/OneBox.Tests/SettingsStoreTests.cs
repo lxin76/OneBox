@@ -1,5 +1,5 @@
 using System.IO;
-using OneBox.Plugins.Clipboard.Core;
+using OneBox.Plugins.TextPin.Core;
 
 namespace OneBox.Tests;
 
@@ -9,7 +9,7 @@ public class SettingsStoreTests
 
     public SettingsStoreTests()
     {
-        _dir = Path.Combine(Path.GetTempPath(), $"cf-settings-{Guid.NewGuid():N}");
+        _dir = Path.Combine(Path.GetTempPath(), $"textpin-settings-{Guid.NewGuid():N}");
     }
 
     public void Dispose()
@@ -21,13 +21,16 @@ public class SettingsStoreTests
     public void MissingFile_ReturnsDefaults()
     {
         var settings = SettingsStore.Load(Path.Combine(_dir, "none.json"));
-        Assert.True(settings.AutoPaste);
         Assert.True(settings.Pinned);
-        Assert.False(settings.MonitoringEnabled);   // 监听默认关闭
-        Assert.Equal(500, settings.MaxHistory);
-        Assert.Equal("Ctrl+Alt+V", settings.PanelHotkey);
+        Assert.True(settings.NoActivate);
+        Assert.True(settings.AutoPaste);
+        Assert.True(settings.WordWrap);
+        Assert.Equal(13, settings.FontSize);
+        Assert.Equal(200_000, settings.MaxTextLength);
+        Assert.Equal("Ctrl+Alt+V", settings.ToggleHotkey);
         Assert.Equal("Ctrl+Alt+P", settings.PasteHotkey);
-        Assert.Equal("Ctrl+Alt+C", settings.ViewHotkey);
+        Assert.Equal("Ctrl+Alt+C", settings.CopyHotkey);
+        Assert.Equal("Ctrl+Alt+X", settings.CaptureHotkey);
     }
 
     [Fact]
@@ -36,24 +39,30 @@ public class SettingsStoreTests
         var path = Path.Combine(_dir, "settings.json");
         var settings = new Settings
         {
-            AutoPaste = false,
             Pinned = false,
-            MonitoringEnabled = true,   // 与默认值相反，验证确实写盘并读回
-            MaxHistory = 123,
-            PanelHotkey = "Ctrl+Alt+Q",
+            NoActivate = false,
+            AutoPaste = false,
+            WordWrap = false,
+            FontSize = 18.5,
+            MaxTextLength = 1234,
+            ToggleHotkey = "Ctrl+Alt+Q",
             PasteHotkey = "Ctrl+Shift+Z",
-            ViewHotkey = "Ctrl+Alt+X",
+            CopyHotkey = "Ctrl+Alt+X",
+            CaptureHotkey = "Ctrl+Alt+W",
         };
         SettingsStore.Save(settings, path);
 
         var loaded = SettingsStore.Load(path);
-        Assert.False(loaded.AutoPaste);
         Assert.False(loaded.Pinned);
-        Assert.True(loaded.MonitoringEnabled);
-        Assert.Equal(123, loaded.MaxHistory);
-        Assert.Equal("Ctrl+Alt+Q", loaded.PanelHotkey);
+        Assert.False(loaded.NoActivate);
+        Assert.False(loaded.AutoPaste);
+        Assert.False(loaded.WordWrap);
+        Assert.Equal(18.5, loaded.FontSize);
+        Assert.Equal(1234, loaded.MaxTextLength);
+        Assert.Equal("Ctrl+Alt+Q", loaded.ToggleHotkey);
         Assert.Equal("Ctrl+Shift+Z", loaded.PasteHotkey);
-        Assert.Equal("Ctrl+Alt+X", loaded.ViewHotkey);
+        Assert.Equal("Ctrl+Alt+X", loaded.CopyHotkey);
+        Assert.Equal("Ctrl+Alt+W", loaded.CaptureHotkey);
     }
 
     [Fact]
@@ -63,6 +72,6 @@ public class SettingsStoreTests
         Directory.CreateDirectory(_dir);
         File.WriteAllText(path, "{ 这不是 JSON !!!");
         var loaded = SettingsStore.Load(path);
-        Assert.True(loaded.AutoPaste);
+        Assert.True(loaded.Pinned);
     }
 }

@@ -27,8 +27,8 @@
     <ProjectReference Include="..\..\src\OneBox.Abstractions\OneBox.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
     <ProjectReference Include="..\..\src\OneBox.Host\OneBox.Host.csproj" />
-    <ProjectReference Include="..\..\src\OneBox.Plugins.Clipboard.Core\OneBox.Plugins.Clipboard.Core.csproj" />
-    <ProjectReference Include="..\..\src\OneBox.Plugins.Clipboard\OneBox.Plugins.Clipboard.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.TextPin.Core\OneBox.Plugins.TextPin.Core.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.TextPin\OneBox.Plugins.TextPin.csproj" />
     <ProjectReference Include="..\..\src\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
   </ItemGroup>
 

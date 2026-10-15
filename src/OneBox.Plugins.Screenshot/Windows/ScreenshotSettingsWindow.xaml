@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OneBox 截图设置"
+        Icon="pack://application:,,,/Assets/app.ico"
         Width="520" SizeToContent="Height" MaxHeight="720"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize" ShowInTaskbar="True"
         Background="#1B1B2F" Foreground="#E6E8F0" FontSize="12">
@@ -121,8 +122,6 @@
 
             <CheckBox x:Name="CopyCheck" Content="截图后自动复制到剪贴板" Margin="0,12,0,4"
                       Checked="OnCopyChanged" Unchecked="OnCopyChanged"/>
-            <CheckBox x:Name="AutoSaveCheck" Content="截图后立即保存到文件（不询问）"
-                      Checked="OnAutoSaveChanged" Unchecked="OnAutoSaveChanged"/>
             <CheckBox x:Name="PinCheck" Content="贴图默认置顶（始终浮在其它窗口最上层）"
                       Checked="OnPinChanged" Unchecked="OnPinChanged"/>
 
@@ -167,6 +166,9 @@
             <CheckBox x:Name="StripSpacesCheck" Content="去掉中文之间的空格（推荐）"
                       Margin="0,8,0,0"
                       Checked="OnStripSpacesChanged" Unchecked="OnStripSpacesChanged"/>
+            <CheckBox x:Name="EnhanceCheck" Content="小字图像增强（文字偏小时放大后再识别）"
+                      Margin="0,4,0,0"
+                      Checked="OnEnhanceChanged" Unchecked="OnEnhanceChanged"/>
 
             <TextBlock Text="全局热键" Style="{StaticResource SectionTitle}"/>
             <Grid Margin="0,2,0,4">

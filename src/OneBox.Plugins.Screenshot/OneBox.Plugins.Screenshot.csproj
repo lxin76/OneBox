@@ -12,6 +12,8 @@
     <AssemblyName>OneBox.Plugins.Screenshot</AssemblyName>
     <RootNamespace>OneBox.Plugins.Screenshot</RootNamespace>
     <Description>OneBox 截图小工具：全屏/区域/滚动截长图，贴图置顶，保存与文字识别。</Description>
+    <!-- exe 与任务栏图标（截图） -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,5 +21,53 @@
     <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
     <ProjectReference Include="..\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- 窗口 Icon 用 pack 资源；列表图标由宿主直接从 exe 的嵌入图标里取 -->
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PaddleOCR 双引擎：RapidOcrNet（纯 C# 管线）+ ONNX Runtime（CPU）。
+         RapidOcrNet 包自带的 models/v5 只含 latin 识别模型，中文识别模型由
+         PrepareModels.ps1 下载到本项目 models/v5/ 后随构建复制到输出目录。 -->
+    <PackageReference Include="RapidOcrNet" Version="4.2.0" />
+    <!-- 包传递依赖里 Linux native 资产用不到，排除以减小发布体积 -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.1" ExcludeAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PrepareModels.ps1 下载的中文识别模型与字典；缺失时插件静默回退系统 OCR 引擎。
+         注意：仅靠 CopyToOutputDirectory 不足以稳定发布这些文件——MSBuild 的发布增量缓存
+         （obj\<cfg>\<rid>\PublishOutputs.*.txt）一旦把某文件记为"已发布"，之后即使它已从
+         输出目录被删掉也不会补回，会把一次"缺模型"的发布永久固化。发布由下面的
+         CopyOcrModelAssets 用裸 Copy 无条件兜底。 -->
+    <None Include="models\v5\*.*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('models\v5')" />
+  </ItemGroup>
+
+  <!-- 发布兜底：无视增量缓存，把工程内的中文模型/字典直接拷到发布目录。
+       RapidOcrNet 包自带的 latin 模型由包内 targets 的裸 Copy 拷贝，本 Target 负责工程内的中文模型，
+       两者合起来才能凑齐 PaddleOcrService.IsAvailable 要求的 4 个文件。 -->
+  <Target Name="CopyOcrModelAssets" AfterTargets="Publish" Condition="Exists('models\v5')">
+    <ItemGroup>
+      <OcrModelAsset Include="models\v5\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OcrModelAsset)" DestinationFolder="$(PublishDir)models\v5\" SkipUnchangedFiles="false" />
+  </Target>
+
+  <!-- 构建守卫：中文模型缺失时明确告警，避免"静默回退系统 OCR 引擎"这种
+       表面正常、识别质量却明显下降的降级被忽略。
+       需要让缺失直接失败时传 -p:_RequireOcrModels=true。 -->
+  <Target Name="CheckOcrModels" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_OcrRecModel>$(MSBuildProjectDirectory)\models\v5\ch_PP-OCRv5_rec_mobile.onnx</_OcrRecModel>
+      <_OcrDict>$(MSBuildProjectDirectory)\models\v5\ppocrv5_dict.txt</_OcrDict>
+      <_OcrModelsMissing Condition="!Exists('$(_OcrRecModel)') Or !Exists('$(_OcrDict)')">true</_OcrModelsMissing>
+    </PropertyGroup>
+    <Warning Condition="'$(_OcrModelsMissing)' == 'true' And '$(_RequireOcrModels)' != 'true'"
+             Text="PaddleOCR 中文模型缺失（$(_OcrRecModel) / $(_OcrDict)）：截图插件将静默回退系统 OCR 引擎，识别质量明显下降。请先运行 PrepareModels.ps1。" />
+    <Error Condition="'$(_OcrModelsMissing)' == 'true' And '$(_RequireOcrModels)' == 'true'"
+           Text="严格模式 -p:_RequireOcrModels=true：PaddleOCR 中文模型缺失，请先运行 PrepareModels.ps1。" />
+  </Target>
 
 </Project>

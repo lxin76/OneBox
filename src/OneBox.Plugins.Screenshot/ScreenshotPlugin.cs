@@ -345,6 +345,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
             return;
         }
 
+        // 全屏截图没有合适的位置可放贴图（会盖住整个屏幕），交给 PinWindow 的默认右下角
         FinishCapture(shot, "全屏截图");
     }
 
@@ -384,7 +385,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         }
 
         var name = string.IsNullOrEmpty(windowTitle) ? "区域截图" : $"区域截图 · {windowTitle}";
-        FinishCapture(shot, name!);
+        FinishCapture(shot, name!, region);
     }
 
     // ---- 滚动截长图 ----
@@ -428,13 +429,14 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
             return;
         }
 
-        FinishCapture(result, $"滚动截长图 · {region.Width}×{result.PixelHeight}");
+        FinishCapture(result, $"滚动截长图 · {region.Width}×{result.PixelHeight}", region);
     }
 
-    // ---- 截图收尾：复制 / 自动保存 / 贴图 ----
+    // ---- 截图收尾：复制 / 贴图预览（不再自动落盘，保存走「另存为」） ----
 
-    /// <summary>截图完成后统一处理：按设置复制到剪贴板、自动保存，并以贴图形式浮在屏幕上。</summary>
-    private void FinishCapture(BitmapSource shot, string sourceName)
+    /// <summary>截图完成后统一处理：按设置复制到剪贴板，并以贴图形式预览在截图位置附近。</summary>
+    private void FinishCapture(BitmapSource shot, string sourceName,
+        System.Drawing.Rectangle? sourceRegion = null)
     {
         if (Settings.CopyToClipboard)
         {
@@ -442,27 +444,13 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
                 _ = _context.LogWarningAsync("截图已生成，但写入剪贴板失败（可能被其他程序占用）。");
         }
 
-        if (Settings.AutoSave)
-        {
-            try
-            {
-                var path = ImageCodec.Save(shot, Settings, DateTime.Now);
-                AppLog.Write($"自动保存：{path}");
-                _ = _context.NotifyAsync("截图已保存", path);
-            }
-            catch (Exception ex)
-            {
-                AppLog.Write($"自动保存失败: {ex.Message}");
-                _ = _context.LogErrorAsync($"自动保存失败：{ex.Message}");
-            }
-        }
-
-        ShowPin(shot, sourceName);
+        ShowPin(shot, sourceName, sourceRegion);
         _ = _context.SetStatusAsync(BuildStatusText());
     }
 
-    /// <summary>把图片作为置顶贴图显示。</summary>
-    private void ShowPin(BitmapSource shot, string sourceName)
+    /// <summary>把图片作为置顶贴图显示。<paramref name="sourceRegion"/> 是截图区域（物理像素），贴图优先出现在那里。</summary>
+    private void ShowPin(BitmapSource shot, string sourceName,
+        System.Drawing.Rectangle? sourceRegion = null)
     {
         PinWindow? pin = null;
 
@@ -473,7 +461,8 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         });
 
         pin.SaveRequested += p => _ = SavePinAsync(p);
-        pin.OcrRequested += p => _ = RecognizeAsync(p.Source, "贴图识别");
+        pin.DeleteRequested += p => DeletePin(p);
+        pin.OcrRequested += p => _ = RecognizeAsync(p.Source, "贴图识别", p);
 
         // 划选文字：OCR 只做一次并缓存在贴图窗上，之后拖动选择是纯几何计算。
         // 缓存挂在 PinWindow 自己身上，贴图关闭即随之释放。
@@ -482,7 +471,9 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         {
             if (cachedLayout is not null) return cachedLayout;
 
-            var outcome = await OcrService.RecognizeAsync(window.Source).ConfigureAwait(true);
+            var outcome = await OcrService.RecognizeAsync(
+                window.Source, Settings.OcrLanguage, Settings.OcrStripCjkSpaces, Settings.OcrEnhanceImage)
+                .ConfigureAwait(true);
             if (!outcome.Success)
             {
                 AppLog.Write($"贴图划选识别失败: {outcome.Error}");
@@ -499,16 +490,41 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         _pins.Add(pin);
         pin.Show();
         pin.SetPinned(Settings.PinTopmost);
+        if (sourceRegion is { } region) pin.MoveToRegion(region);
 
         AppLog.Write($"已贴图：{sourceName}（{shot.PixelWidth}×{shot.PixelHeight}，共 {_pins.Count} 张）");
     }
 
-    /// <summary>把贴图保存到文件，并用默认看图程序打开。</summary>
+    /// <summary>
+    /// 把贴图保存到文件。截图不再自动落盘，保存一律由用户通过「另存为」对话框
+    /// 亲自选择位置与文件名，避免悄悄往默认目录堆文件。
+    /// </summary>
     private async Task SavePinAsync(PinWindow pin)
     {
         try
         {
-            var path = ImageCodec.Save(pin.Source, Settings, DateTime.Now);
+            // Win32 保存对话框不能设置 WPF Owner，用活动窗口兜底即可；
+            // 对话框自身会置顶，不会落到贴图下面。
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "保存截图",
+                FileName = FileNameBuilder.Build(Settings.FileNameTemplate, DateTime.Now),
+                DefaultExt = FileNameBuilder.ExtensionFor(Settings.Format),
+                Filter = Settings.Format == ShotImageFormat.Jpeg
+                    ? "JPEG 图片|*.jpg;*.jpeg|PNG 图片|*.png|所有文件|*.*"
+                    : "PNG 图片|*.png|JPEG 图片|*.jpg;*.jpeg|所有文件|*.*",
+                InitialDirectory = Settings.ResolveSaveDirectory(),
+            };
+
+            var path = _dispatcher.Invoke(() => dialog.ShowDialog() == true ? dialog.FileName : null);
+            if (path is null)
+            {
+                AppLog.Write("保存已取消");
+                return;
+            }
+
+            ImageCodec.SaveTo(pin.Source, path, Settings.Format, Settings.JpegQuality);
+            pin.SavedFilePath = path;
             AppLog.Write($"已保存：{path}");
 
             await _context.NotifyAsync("截图已保存", path).ConfigureAwait(false);
@@ -529,6 +545,34 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
             AppLog.Write($"保存贴图失败: {ex.Message}");
             await _context.LogErrorAsync($"保存失败：{ex.Message}").ConfigureAwait(false);
         }
+    }
+
+    /// <summary>删除贴图：关闭预览；若已保存过文件，询问后一并删除。</summary>
+    private void DeletePin(PinWindow pin)
+    {
+        var saved = pin.SavedFilePath;
+        if (!string.IsNullOrEmpty(saved) && File.Exists(saved))
+        {
+            var delete = _dispatcher.Invoke(() => MessageBox.Show(
+                $"要同时删除已保存的文件吗？\n{saved}",
+                "删除截图", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes);
+            if (delete)
+            {
+                try
+                {
+                    File.Delete(saved);
+                    AppLog.Write($"已删除文件：{saved}");
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"删除文件失败: {ex.Message}");
+                    _ = _context.LogErrorAsync($"删除文件失败：{ex.Message}");
+                }
+            }
+        }
+
+        AppLog.Write("贴图已删除（关闭预览）");
+        pin.Close();
     }
 
     // ---- 文本识别 ----
@@ -558,14 +602,20 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     /// 两者都必须在 STA 的 UI 线程上执行（剪贴板写 OLE 会直接抛“必须先将当前线程
     /// 设置为单个线程单元(STA)模式”）。识别本身的耗时部分在 WinRT 里异步完成，不会卡住 UI。
     /// </summary>
-    private async Task RecognizeAsync(BitmapSource source, string header)
+    private async Task RecognizeAsync(BitmapSource source, string header, PinWindow? origin = null)
     {
         await _context.SetStatusAsync("正在识别文字…").ConfigureAwait(true);
 
         var outcome = await OcrService.RecognizeAsync(
-            source, Settings.OcrLanguage, Settings.OcrStripCjkSpaces).ConfigureAwait(true);
+            source, Settings.OcrLanguage, Settings.OcrStripCjkSpaces, Settings.OcrEnhanceImage).ConfigureAwait(true);
 
-        AppLog.Write($"识别完成：成功={outcome.Success} 字符={outcome.Text.Length} 行={outcome.Lines.Count} 错误={outcome.Error ?? "-"}");
+        AppLog.Write($"识别完成：成功={outcome.Success} 字符={outcome.Text.Length} 行={outcome.Layout?.Lines.Count ?? outcome.Lines.Count}" +
+            $" 增强={outcome.EnhancementNote ?? "-"} 错误={outcome.Error ?? "-"}" +
+            (origin is { IsClosed: true } ? "（来源贴图已关闭，结果窗口独立展示）" : ""));
+
+        // 识别结果窗口是独立的文本展示：来源贴图即使在识别期间被关掉，
+        // 结果也照常落地（写剪贴板 + 弹窗）——用户主动发起的识别不该凭空消失。
+        // UI 卡顿问题由 OcrService 把重活移到线程池解决，不靠丢弃结果。
 
         if (!outcome.Success)
         {
@@ -585,12 +635,16 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         // 识别结果默认复制到剪贴板，省一次手动操作
         var copied = ClipboardSupport.CopyText(outcome.Text);
 
+        var lineCount = outcome.Layout?.Lines.Count ?? outcome.Lines.Count;
+        var enhanceNote = string.IsNullOrEmpty(outcome.EnhancementNote)
+            ? ""
+            : $" · {outcome.EnhancementNote}";
         var window = new OcrResultWindow(
             outcome.Text,
             header,
             copied
-                ? $"已复制到剪贴板 · {outcome.Text.Length} 个字符 · {outcome.Lines.Count} 行"
-                : $"共 {outcome.Text.Length} 个字符 · {outcome.Lines.Count} 行（剪贴板被占用，未自动复制）")
+                ? $"已复制到剪贴板 · {outcome.Text.Length} 个字符 · {lineCount} 行{enhanceNote}"
+                : $"共 {outcome.Text.Length} 个字符 · {lineCount} 行{enhanceNote}（剪贴板被占用，未自动复制）")
         {
             Owner = null,
         };

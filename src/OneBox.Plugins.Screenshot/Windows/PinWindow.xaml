@@ -48,52 +48,57 @@
     <Border x:Name="RootBorder" BorderBrush="#803B82F6" BorderThickness="1"
             Background="#F01B1B2F">
         <Grid>
-            <!-- 图片本体 -->
-            <Image x:Name="ShotImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <Grid.RowDefinitions>
+                <!-- 行0：图片本体（贴图区域，不再被工具条遮挡） -->
+                <RowDefinition Height="*"/>
+                <!-- 行1：外部工具区（贴图下方专属横条，不占贴图区域） -->
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <!-- 文字选择高亮层：矩形由 OcrLayout 按字符槽算出，与命中测试同源。
-                 IsHitTestVisible=False 让鼠标事件照常冒泡到窗口级处理。 -->
-            <Canvas x:Name="HighlightLayer" IsHitTestVisible="False"/>
+            <Grid Grid.Row="0">
+                <!-- 图片本体 -->
+                <Image x:Name="ShotImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
 
-            <!-- 悬浮工具条：平时半透明，鼠标移入才完全显示 -->
-            <Border x:Name="Toolbar" VerticalAlignment="Top" HorizontalAlignment="Center"
-                    Margin="0,10,0,0" Background="#E6181828" CornerRadius="9"
-                    Padding="5,4" Opacity="0.28"
-                    MouseEnter="OnToolbarMouseEnter" MouseLeave="OnToolbarMouseLeave">
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="PinButton" Style="{StaticResource ToolButton}" Content="&#x1F4CC;"
-                            ToolTip="置顶：保持图片浮在所有窗口最上方（Alt+T 切换）" Click="OnToggleTopmost"/>
-                    <Button x:Name="ClosePinsButton" Style="{StaticResource ToolButton}" Content="&#x2715;"
-                            ToolTip="关闭本贴图（Esc）" Click="OnCloseClick"/>
-                    <Rectangle Style="{StaticResource ToolSeparator}"/>
-                    <Button x:Name="CopyButton" Style="{StaticResource ToolButton}" Content="&#x1F4CB;"
-                            ToolTip="复制图片到剪贴板（Alt+C）" Click="OnCopyClick"/>
-                    <Button x:Name="SaveButton" Style="{StaticResource ToolButton}" Content="&#x1F4BE;"
-                            ToolTip="保存到文件（Alt+S）" Click="OnSaveClick"/>
-                    <Button x:Name="OcrButton" Style="{StaticResource ToolButton}" Content="&#x1F524;"
-                            ToolTip="识别图中文字（Alt+O）" Click="OnOcrClick"/>
-                    <Button x:Name="SelectTextButton" Style="{StaticResource ToolButton}" Content="&#x1F4DD;"
-                            ToolTip="选择文字：在图上拖动划选，松开即复制（Alt+X）" Click="OnToggleTextSelect"/>
-                    <Rectangle Style="{StaticResource ToolSeparator}"/>
-                    <Button x:Name="ResetZoomButton" Style="{StaticResource ToolButton}" Content="&#x21BA;"
-                            ToolTip="恢复原始大小（Alt+0）" Click="OnResetZoomClick"/>
-                    <Button x:Name="OpenButton" Style="{StaticResource ToolButton}" Content="&#x2197;"
-                            ToolTip="用默认看图程序打开（Alt+Enter）" Click="OnOpenInViewerClick"/>
-                </StackPanel>
-            </Border>
+                <!-- 文字选择高亮层：矩形由 OcrLayout 按字符槽算出，与命中测试同源。
+                     IsHitTestVisible=False 让鼠标事件照常冒泡到窗口级处理。 -->
+                <Canvas x:Name="HighlightLayer" IsHitTestVisible="False"/>
 
-            <!-- 左上角小标题：显示尺寸与缩放 -->
-            <Border x:Name="InfoBadge" HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Margin="10,10,0,0" Background="#C6181828" CornerRadius="6" Padding="7,2"
-                    IsHitTestVisible="False">
-                <TextBlock x:Name="InfoText" Foreground="#D8DCE8" FontSize="11"/>
-            </Border>
+                <!-- 右下角缩放手柄 -->
+                <Border x:Name="ResizeHandle" Width="18" Height="18" HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom" Background="#30000000" CornerRadius="0,0,6,0"
+                        Cursor="SizeNWSE" MouseLeftButtonDown="OnResizeStart">
+                    <Path Data="M 2,16 L 16,2 M 8,16 L 16,8" Stroke="#C0C6D8" StrokeThickness="1.4"/>
+                </Border>
+            </Grid>
 
-            <!-- 右下角缩放手柄 -->
-            <Border x:Name="ResizeHandle" Width="18" Height="18" HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom" Background="#30000000" CornerRadius="0,0,6,0"
-                    Cursor="SizeNWSE" MouseLeftButtonDown="OnResizeStart">
-                <Path Data="M 2,16 L 16,2 M 8,16 L 16,8" Stroke="#C0C6D8" StrokeThickness="1.4"/>
+            <!-- 外部工具区：贴图下方的专属横条，左侧信息、右侧工具按钮，始终可见不遮挡图片 -->
+            <Border Grid.Row="1" x:Name="Toolbar" Background="#E6181828" Padding="8,4">
+                <DockPanel LastChildFill="False">
+                    <TextBlock x:Name="InfoText" DockPanel.Dock="Left" VerticalAlignment="Center"
+                               Foreground="#D8DCE8" FontSize="11"/>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button x:Name="PinButton" Style="{StaticResource ToolButton}" Content="&#x1F4CC;"
+                                ToolTip="置顶：保持图片浮在所有窗口最上方（Alt+T 切换）" Click="OnToggleTopmost"/>
+                        <Button x:Name="ClosePinsButton" Style="{StaticResource ToolButton}" Content="&#x2715;"
+                                ToolTip="关闭本贴图（Esc）" Click="OnCloseClick"/>
+                        <Button x:Name="DeleteButton" Style="{StaticResource ToolButton}" Content="&#x1F5D1;&#xFE0E;"
+                                ToolTip="删除此截图：关闭预览；若已保存过文件，一并删除（Del）" Click="OnDeleteClick"/>
+                        <Rectangle Style="{StaticResource ToolSeparator}"/>
+                        <Button x:Name="CopyButton" Style="{StaticResource ToolButton}" Content="&#x1F4CB;"
+                                ToolTip="复制图片到剪贴板（Alt+C）" Click="OnCopyClick"/>
+                        <Button x:Name="SaveButton" Style="{StaticResource ToolButton}" Content="&#x1F4BE;"
+                                ToolTip="保存到文件（Alt+S）" Click="OnSaveClick"/>
+                        <Button x:Name="OcrButton" Style="{StaticResource ToolButton}" Content="&#x1F524;"
+                                ToolTip="识别图中文字（Alt+O）" Click="OnOcrClick"/>
+                        <Button x:Name="SelectTextButton" Style="{StaticResource ToolButton}" Content="&#x1F4DD;"
+                                ToolTip="选择文字：在图上拖动划选，松开即复制（Alt+X）" Click="OnToggleTextSelect"/>
+                        <Rectangle Style="{StaticResource ToolSeparator}"/>
+                        <Button x:Name="ResetZoomButton" Style="{StaticResource ToolButton}" Content="&#x21BA;"
+                                ToolTip="恢复原始大小（Alt+0）" Click="OnResetZoomClick"/>
+                        <Button x:Name="OpenButton" Style="{StaticResource ToolButton}" Content="&#x2197;"
+                                ToolTip="用默认看图程序打开（Alt+Enter）" Click="OnOpenInViewerClick"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
         </Grid>
     </Border>

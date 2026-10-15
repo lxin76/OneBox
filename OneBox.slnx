@@ -5,8 +5,8 @@
     <Project Path="src/OneBox.Plugin.Sdk/OneBox.Plugin.Sdk.csproj" />
   </Folder>
   <Folder Name="/plugins/">
-    <Project Path="src/OneBox.Plugins.Clipboard/OneBox.Plugins.Clipboard.csproj" />
-    <Project Path="src/OneBox.Plugins.Clipboard.Core/OneBox.Plugins.Clipboard.Core.csproj" />
+    <Project Path="src/OneBox.Plugins.TextPin/OneBox.Plugins.TextPin.csproj" />
+    <Project Path="src/OneBox.Plugins.TextPin.Core/OneBox.Plugins.TextPin.Core.csproj" />
     <Project Path="src/OneBox.Plugins.QuickNote/OneBox.Plugins.QuickNote.csproj" />
     <Project Path="src/OneBox.Plugins.Screenshot/OneBox.Plugins.Screenshot.csproj" />
     <Project Path="src/OneBox.Plugins.Screenshot.Core/OneBox.Plugins.Screenshot.Core.csproj" />

@@ -95,6 +95,7 @@
                     </Grid.RowDefinitions>
 
                     <ListBox x:Name="PluginList" Grid.Row="0"
+                             ItemsSource="{Binding Plugins}"
                              Background="Transparent" BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              HorizontalContentAlignment="Stretch">
@@ -124,6 +125,9 @@
 
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
+                                                <Image Source="{Binding Icon}" Width="30" Height="30"
+                                                       Margin="0,0,10,0" VerticalAlignment="Center"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
                                                            Foreground="#F2F2F2" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding VersionText}" Style="{StaticResource Hint}"

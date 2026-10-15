@@ -2,7 +2,8 @@ namespace OneBox.Plugins.Screenshot.Core;
 
 /// <summary>
 /// 插件的私有数据目录。宿主在握手时把分配好的目录传进来
-/// （%LOCALAPPDATA%\OneBox\plugin-state\screenshot），卸载插件时由宿主决定是否删除。
+/// （便携模式下是 &lt;宿主安装目录&gt;\data\plugin-state\screenshot），
+/// 卸载插件时由宿主决定是否删除。
 /// </summary>
 public static class AppPaths
 {

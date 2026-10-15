@@ -67,12 +67,12 @@ internal static class Program
         }
     }
 
-    /// <summary>连接尚未建立时的兜底日志。</summary>
+    /// <summary>连接尚未建立时的兜底日志：写到插件 exe 旁边，不落系统用户目录。</summary>
     private static void LogCrash(Exception ex)
     {
         try
         {
-            var path = Path.Combine(Path.GetTempPath(), "OneBox-screenshot-crash.log");
+            var path = Path.Combine(AppContext.BaseDirectory, "OneBox-screenshot-crash.log");
             File.AppendAllText(path, $"[{DateTime.Now:O}] {ex}{Environment.NewLine}{Environment.NewLine}");
         }
         catch

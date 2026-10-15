@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OneBox.Abstractions;
 using OneBox.Host.Services;
@@ -40,6 +41,9 @@ public partial class PluginItemViewModel : ObservableObject
 
     /// <summary>是否随宿主分发的内置插件（内置插件不可卸载）。</summary>
     public bool IsBundled => _plugin.Source == PluginSource.Bundled;
+
+    /// <summary>工具箱列表里显示的插件图标（清单未声明时回退到通用占位图标）。</summary>
+    public ImageSource Icon => PluginIcons.ForManifest(_plugin.Manifest);
 
     /// <summary>清单损坏：不能启用，只能卸载或忽略。</summary>
     public bool IsBroken => _plugin.Manifest is null;

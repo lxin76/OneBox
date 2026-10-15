@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>OneBox.Plugins.TextPin</AssemblyName>
+    <RootNamespace>OneBox.Plugins.TextPin</RootNamespace>
+    <!-- exe 与任务栏图标（置顶文本） -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\OneBox.Plugins.TextPin.Core\OneBox.Plugins.TextPin.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 窗口 Icon 用 pack 资源；列表图标由宿主直接从 exe 的嵌入图标里取 -->
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 让单元测试能直接验证抓取选中文字的判定逻辑（不依赖真实按键注入） -->
+    <InternalsVisibleTo Include="OneBox.Tests" />
+  </ItemGroup>
+
+</Project>

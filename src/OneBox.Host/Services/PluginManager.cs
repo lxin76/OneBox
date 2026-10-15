@@ -81,6 +81,9 @@ public sealed class PluginManager : IAsyncDisposable
         foreach (var plugin in _plugins.Where(p => p.Manifest is not null))
             CreateRuntime(plugin);
 
+        // 重新扫描可能换掉了插件目录，图标缓存里的路径可能已失效
+        PluginIcons.Invalidate();
+
         HostLog.Write($"发现插件 {_plugins.Count} 个");
         Changed?.Invoke();
     }

@@ -44,6 +44,23 @@ public partial class App : Application
         try
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            // 老版本把数据放在 %LOCALAPPDATA%\OneBox，改成便携后要先搬过来，
+            // 否则用户的剪贴板历史、设置、已装插件会像凭空消失了一样
+            LegacyDataMigrator.MigrateIfNeeded();
+
+            // 单实例：托盘、全局热键、插件进程都只容得下一份。
+            // 第二个实例把请求转交给现有实例后自行退出，否则会互相抢热键。
+            var startupRequest = e.Args.Any(a => IsSwitch(a, "toolbox")) ? "toolbox"
+                : e.Args.Any(a => IsSwitch(a, "settings")) ? "settings"
+                : null;
+
+            if (!SingleInstance.TryAcquire(startupRequest))
+            {
+                Shutdown();
+                return;
+            }
+
             _registry = PluginRegistry.Load();
 
             // 热键需要一个已创建句柄的窗口承载，因此先建一个不可见的主窗口
@@ -71,6 +88,20 @@ public partial class App : Application
 
             if (_registry.Settings.ShowToolboxOnStartup) OpenToolbox();
 
+            // 命令行开关：方便做快捷方式，也便于自动化验证
+            //   OneBox.exe --toolbox    打开工具箱
+            //   OneBox.exe --settings   打开设置中心
+            // （已有实例在跑时，这些请求由上面的单实例闸门转交给它）
+            if (startupRequest == "toolbox") OpenToolbox();
+            else if (startupRequest == "settings") OpenSettingsCenter();
+
+            // 后续实例转交进来的请求：回调在后台线程，切回 UI 线程再开窗
+            SingleInstance.StartListening(request => Dispatcher.BeginInvoke(() =>
+            {
+                if (request == "toolbox") OpenToolbox();
+                else if (request == "settings") OpenSettingsCenter();
+            }));
+
             HostLog.Write($"OneBox 宿主已启动（版本 {HostVersion}，插件 {_manager.Plugins.Count} 个）");
         }
         catch (Exception ex)
@@ -81,6 +112,10 @@ public partial class App : Application
     }
 
     // ---- 工具箱 ----
+
+    /// <summary>匹配命令行开关，忽略大小写与前置的 - / --。</summary>
+    private static bool IsSwitch(string argument, string name)
+        => argument.TrimStart('-', '/').Equals(name, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>打开（或激活）工具箱窗口。</summary>
     public void OpenToolbox()
@@ -162,6 +197,11 @@ public partial class App : Application
             {
                 var submenu = new MenuItem { Header = group.PluginName };
 
+                // 子菜单标题带插件自己的图标，菜单里一眼能认出是哪个小工具
+                var pluginRuntime = runtimes[group.PluginId];
+                if (PluginIcons.ForManifest(pluginRuntime.Manifest) is { } pluginIcon)
+                    submenu.Icon = new System.Windows.Controls.Image { Source = pluginIcon, Width = 16, Height = 16 };
+
                 foreach (var entry in group.Entries)
                 {
                     if (entry.IsSeparator)
@@ -170,7 +210,7 @@ public partial class App : Application
                         continue;
                     }
 
-                    submenu.Items.Add(CreateMenuItem(runtimes[group.PluginId], entry.Item!));
+                    submenu.Items.Add(CreateMenuItem(pluginRuntime, entry.Item!));
                 }
 
                 menu.Items.Add(submenu);
@@ -271,6 +311,7 @@ public partial class App : Application
         _manager?.StopAll();
         _manager?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
         _tray?.Dispose();
+        SingleInstance.Release();
         HostLog.Write("OneBox 宿主已退出");
         base.OnExit(e);
     }

@@ -18,8 +18,11 @@
             </Path.Data>
         </Path>
 
-        <!-- 选区边框 -->
+        <!-- 选区边框：必须显式 Left/Top 对齐，否则 Grid 的默认 Stretch 在设了
+             Width/Height 后会退化成居中，Margin 不再是绝对落点而是"留白"，
+             选区框会跳到别处，看起来像多出一个深色区域。 -->
         <Border x:Name="SelectionBorder" Visibility="Collapsed"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
                 BorderBrush="#FF3B82F6" BorderThickness="1" Background="Transparent"
                 IsHitTestVisible="False"/>
 

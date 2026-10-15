@@ -122,11 +122,20 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel>
-                                <TextBlock Text="{Binding Name}" Foreground="#F2F2F2" FontSize="12.5"/>
-                                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Hint}"
-                                           Margin="0,2,0,0"/>
-                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Image Grid.Column="0" Source="{Binding Icon}" Width="24" Height="24"
+                                       Margin="0,0,9,0" VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Name}" Foreground="#F2F2F2" FontSize="12.5"/>
+                                    <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Hint}"
+                                               Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>

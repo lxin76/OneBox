@@ -30,7 +30,7 @@ public class ScreenshotSettingsSchemaTests
         Assert.Contains(ScreenshotSettingsSchema.KeyFormat, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyJpegQuality, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyCopyToClipboard, keys);
-        Assert.Contains(ScreenshotSettingsSchema.KeyAutoSave, keys);
+        Assert.Contains(ScreenshotSettingsSchema.KeyPinTopmost, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyPinTopmost, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyShowToolbarAfterRegion, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyScrollMinMatchRows, keys);
@@ -38,6 +38,7 @@ public class ScreenshotSettingsSchemaTests
         Assert.Contains(ScreenshotSettingsSchema.KeyScrollWheelNotches, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyOcrLanguage, keys);
         Assert.Contains(ScreenshotSettingsSchema.KeyOcrStripCjkSpaces, keys);
+        Assert.Contains(ScreenshotSettingsSchema.KeyOcrEnhanceImage, keys);
     }
 
     [Fact]
@@ -61,12 +62,12 @@ public class ScreenshotSettingsSchemaTests
     [Fact]
     public void 声明回显当前值()
     {
-        var settings = new ScreenshotSettings { JpegQuality = 77, AutoSave = true, Format = ShotImageFormat.Jpeg };
+        var settings = new ScreenshotSettings { JpegQuality = 77, PinTopmost = true, Format = ShotImageFormat.Jpeg };
 
         var descriptors = ScreenshotSettingsSchema.Describe(settings).ToDictionary(d => d.Key);
 
         Assert.Equal(77, SettingValueCodecNumber(descriptors[ScreenshotSettingsSchema.KeyJpegQuality].Value));
-        Assert.True(descriptors[ScreenshotSettingsSchema.KeyAutoSave].Value!.Value.GetBoolean());
+        Assert.True(descriptors[ScreenshotSettingsSchema.KeyPinTopmost].Value!.Value.GetBoolean());
         Assert.Equal("Jpeg", descriptors[ScreenshotSettingsSchema.KeyFormat].Value!.Value.GetString());
     }
 
@@ -102,11 +103,11 @@ public class ScreenshotSettingsSchemaTests
     [Fact]
     public void 应用布尔改动()
     {
-        var settings = new ScreenshotSettings { AutoSave = false };
+        var settings = new ScreenshotSettings { PinTopmost = false };
 
         Assert.True(ScreenshotSettingsSchema.Apply(
-            settings, ScreenshotSettingsSchema.KeyAutoSave, Json("true")));
-        Assert.True(settings.AutoSave);
+            settings, ScreenshotSettingsSchema.KeyPinTopmost, Json("true")));
+        Assert.True(settings.PinTopmost);
     }
 
     [Fact]
@@ -175,11 +176,11 @@ public class ScreenshotSettingsSchemaTests
     [Fact]
     public void 布尔键收到错误类型时忽略()
     {
-        var settings = new ScreenshotSettings { AutoSave = true };
+        var settings = new ScreenshotSettings { PinTopmost = true };
 
         Assert.False(ScreenshotSettingsSchema.Apply(
-            settings, ScreenshotSettingsSchema.KeyAutoSave, Json("\"yes\"")));
-        Assert.True(settings.AutoSave);
+            settings, ScreenshotSettingsSchema.KeyPinTopmost, Json("\"yes\"")));
+        Assert.True(settings.PinTopmost);
     }
 
     [Fact]
@@ -216,23 +217,23 @@ public class ScreenshotSettingsSchemaTests
     [Fact]
     public void 应用无变化的值返回false()
     {
-        var settings = new ScreenshotSettings { AutoSave = false };
+        var settings = new ScreenshotSettings { PinTopmost = false };
 
         Assert.False(ScreenshotSettingsSchema.Apply(
-            settings, ScreenshotSettingsSchema.KeyAutoSave, Json("false")));
+            settings, ScreenshotSettingsSchema.KeyPinTopmost, Json("false")));
     }
 
     [Fact]
     public void 批量应用报告是否发生变化()
     {
-        var settings = new ScreenshotSettings { AutoSave = false, JpegQuality = 92 };
+        var settings = new ScreenshotSettings { PinTopmost = false, JpegQuality = 92 };
 
         Assert.True(ScreenshotSettingsSchema.ApplyAll(settings,
         [
-            Change(ScreenshotSettingsSchema.KeyAutoSave, "true"),
+            Change(ScreenshotSettingsSchema.KeyPinTopmost, "true"),
             Change(ScreenshotSettingsSchema.KeyJpegQuality, "80"),
         ]));
-        Assert.True(settings.AutoSave);
+        Assert.True(settings.PinTopmost);
         Assert.Equal(80, settings.JpegQuality);
     }
 
@@ -251,10 +252,10 @@ public class ScreenshotSettingsSchemaTests
     [Fact]
     public void 批量应用跳过空键()
     {
-        var settings = new ScreenshotSettings { AutoSave = false };
+        var settings = new ScreenshotSettings { PinTopmost = false };
 
         Assert.False(ScreenshotSettingsSchema.ApplyAll(settings, [Change("", "true")]));
-        Assert.False(settings.AutoSave);
+        Assert.False(settings.PinTopmost);
     }
 
     [Fact]
@@ -269,7 +270,7 @@ public class ScreenshotSettingsSchemaTests
             Change(ScreenshotSettingsSchema.KeyScrollMinMatchRows, "null"),
             Change(ScreenshotSettingsSchema.KeyFormat, "\"Webp\""),
             Change(ScreenshotSettingsSchema.KeyOcrLanguage, "{}"),
-            Change(ScreenshotSettingsSchema.KeyAutoSave, "123"),
+            Change(ScreenshotSettingsSchema.KeyPinTopmost, "123"),
             Change(ScreenshotSettingsSchema.KeyFileNameTemplate, "null"),
         ]);
 
@@ -278,7 +279,7 @@ public class ScreenshotSettingsSchemaTests
         Assert.Equal(defaults.ScrollMinMatchRows, settings.ScrollMinMatchRows);
         Assert.Equal(defaults.Format, settings.Format);
         Assert.Equal(defaults.OcrLanguage, settings.OcrLanguage);
-        Assert.Equal(defaults.AutoSave, settings.AutoSave);
+        Assert.Equal(defaults.PinTopmost, settings.PinTopmost);
         Assert.Equal(defaults.FileNameTemplate, settings.FileNameTemplate);
     }
 

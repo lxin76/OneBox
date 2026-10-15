@@ -27,12 +27,14 @@ public class ManifestReaderTests : IDisposable
         return dir;
     }
 
-    private static string Manifest(string id = "demo", string entry = "app.exe", string name = "示例", int protocol = 1)
+    private static string Manifest(string id = "demo", string entry = "app.exe", string name = "示例",
+        int protocol = 1, string? icon = null)
         => JsonSerializer.Serialize(new PluginManifest
         {
             Id = id,
             Name = name,
             Entry = entry,
+            Icon = icon,
             ProtocolVersion = protocol,
             Description = "测试插件",
         }, Protocol.ManifestJson);
@@ -128,5 +130,55 @@ public class ManifestReaderTests : IDisposable
         var result = ManifestReader.Load(dir);
 
         Assert.True(result.Success);
+    }
+
+    [Fact]
+    public void DeclaredIconInsidePluginDirectory_IsKept()
+    {
+        var dir = WritePlugin(Manifest(icon: "app.ico"));
+        File.WriteAllBytes(Path.Combine(dir, "app.ico"), [1, 2, 3]);
+
+        var result = ManifestReader.Load(dir);
+
+        Assert.True(result.Success);
+        Assert.Equal("app.ico", result.Manifest!.Icon);
+    }
+
+    [Fact]
+    public void MissingIconFile_FallsBackInsteadOfFailing()
+    {
+        // 图标只是装饰：文件不在也不能把插件判定成损坏。
+        // 清单字段本身会被清空，宿主转而用 exe 里嵌入的图标。
+        var dir = WritePlugin(Manifest(icon: "app.ico"));
+
+        var result = ManifestReader.Load(dir);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Manifest!.Icon);
+    }
+
+    [Fact]
+    public void IconEscapingPluginDirectory_Ignored()
+    {
+        // 清单不能借图标路径指向插件目录之外，但同样只降级、不判损坏
+        var outside = Path.Combine(_dir, "outside.ico");
+        Directory.CreateDirectory(_dir);
+        File.WriteAllBytes(outside, [1, 2, 3]);
+
+        var dir = WritePlugin(Manifest(icon: @"..\outside.ico"));
+        var result = ManifestReader.Load(dir);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Manifest!.Icon);
+    }
+
+    [Fact]
+    public void NoIconDeclared_LeavesIconNull()
+    {
+        var dir = WritePlugin(Manifest());
+        var result = ManifestReader.Load(dir);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Manifest!.Icon);
     }
 }

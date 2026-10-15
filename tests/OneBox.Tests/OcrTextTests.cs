@@ -52,4 +52,37 @@ public class OcrTextTests
         Assert.False(OcrText.IsCjk('A'));
         Assert.False(OcrText.IsCjk('1'));
     }
+
+    [Fact]
+    public void 版本文本保留换行()
+    {
+        Assert.Equal("第一行\n第二行", OcrText.NormalizeDocument("第一行\n第二行", stripCjkSpaces: false));
+    }
+
+    [Fact]
+    public void 版本文本保留段落空行()
+    {
+        // 这正是与 Normalize 的关键差别：Normalize 会把空行折叠掉
+        Assert.Equal("第一段\n\n第二段", OcrText.NormalizeDocument("第一段\n\n第二段", stripCjkSpaces: false));
+        Assert.Equal("第一段\n第二段", OcrText.Normalize("第一段\n\n第二段", stripCjkSpaces: false));
+    }
+
+    [Fact]
+    public void 版本文本折叠连续空行并去掉首尾空行()
+    {
+        Assert.Equal("A\n\nB", OcrText.NormalizeDocument("\n\nA\n\n\n\nB\n\n\n", stripCjkSpaces: false));
+    }
+
+    [Fact]
+    public void 版本文本逐行去掉中文之间的空格()
+    {
+        Assert.Equal("截图\n识别", OcrText.NormalizeDocument("截 图 \n 识 别", stripCjkSpaces: true));
+    }
+
+    [Fact]
+    public void 版本文本空输入返回空串()
+    {
+        Assert.Equal("", OcrText.NormalizeDocument(null, true));
+        Assert.Equal("", OcrText.NormalizeDocument("   \n  ", true));
+    }
 }

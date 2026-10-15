@@ -29,9 +29,6 @@ public sealed class ScreenshotSettings
     /// <summary>截图完成后是否自动写入剪贴板。</summary>
     public bool CopyToClipboard { get; set; } = true;
 
-    /// <summary>截图完成后是否不询问直接保存到保存目录。</summary>
-    public bool AutoSave { get; set; } = false;
-
     /// <summary>贴图窗口是否默认置顶。</summary>
     public bool PinTopmost { get; set; } = true;
 
@@ -53,6 +50,9 @@ public sealed class ScreenshotSettings
 
     /// <summary>识别结果里是否去掉中文之间的空格。</summary>
     public bool OcrStripCjkSpaces { get; set; } = true;
+
+    /// <summary>文字偏小时是否放大后重识别，用来提高小字识别率。</summary>
+    public bool OcrEnhanceImage { get; set; } = true;
 
     /// <summary>区域截图热键（"Ctrl+Alt+A" 形式）。</summary>
     public string RegionHotkey { get; set; } = "Ctrl+Alt+A";

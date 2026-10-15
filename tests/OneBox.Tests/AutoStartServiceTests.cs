@@ -1,4 +1,4 @@
-using OneBox.Plugins.Clipboard.Services;
+using OneBox.Plugins.TextPin.Services;
 
 namespace OneBox.Tests;
 

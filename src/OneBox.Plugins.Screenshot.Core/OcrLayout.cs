@@ -32,6 +32,41 @@ public sealed class OcrLayout
 
     public bool IsEmpty => _lines.Length == 0;
 
+    /// <summary>
+    /// 按图片版式输出整篇文本：保留每行换行，并在行距明显变大的地方插入空行分段。
+    ///
+    /// 为什么不直接用引擎给的 OcrResult.Text：实测（Windows.Media.Ocr，zh-Hans-CN）
+    /// 它会把所有行用**空格**拼成一行——4 行的结果输出
+    /// "Hello World Second line here Third paragraph text 中 文 测 试 第 三 行"，
+    /// 整串里没有任何换行符。这正是"结果被拼成一行"的根因。
+    /// </summary>
+    /// <param name="paragraphGapRatio">
+    /// 一行顶部到上一行底部之间的空隙超过"中位行高 × 该比例"时视为段落分界，插入一个空行。
+    /// 用中位行高而不是本行高度：短行（只有几个字）的高度可能明显偏小，容易误判分段。
+    /// </param>
+    public string DocumentText(double paragraphGapRatio = 1.2)
+    {
+        if (_lines.Length == 0) return "";
+
+        var bounds = _lines.Select(l => l.Bounds).ToList();
+        var median = OcrPreprocess.MedianLineHeight(bounds);
+        if (median <= 0) median = bounds.Average(b => b.Height);
+        var paragraphGap = median * paragraphGapRatio;
+
+        var builder = new System.Text.StringBuilder();
+        for (int i = 0; i < _lines.Length; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append('\n');
+                var gap = _lines[i].Bounds.Y - _lines[i - 1].Bounds.Bottom;
+                if (gap > paragraphGap) builder.Append('\n');
+            }
+            builder.Append(_lines[i].Text);
+        }
+        return builder.ToString();
+    }
+
     private OcrLayout(OcrLine[] lines)
     {
         _lines = lines;

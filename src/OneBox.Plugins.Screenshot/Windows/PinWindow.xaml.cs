@@ -22,6 +22,12 @@ public partial class PinWindow : Window
     /// </summary>
     private static readonly TimeSpan TopmostReassertInterval = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// 底部外部工具条的高度（DIP）。窗口高度 = 图片显示高度 + 该值；
+    /// 所有"按窗口高度反推图片显示高度"的地方都要先扣掉它。
+    /// </summary>
+    internal const double ToolbarHeight = 34.0;
+
     private readonly BitmapSource _source;
     private readonly Action<PinWindow>? _onClosed;
     private readonly DispatcherTimer _topmostTimer;
@@ -61,6 +67,19 @@ public partial class PinWindow : Window
     /// <summary>请求识别本贴图的文字。</summary>
     public event Action<PinWindow>? OcrRequested;
 
+    /// <summary>请求删除本贴图（连同已保存的文件，由插件主体决定）。</summary>
+    public event Action<PinWindow>? DeleteRequested;
+
+    /// <summary>本贴图已保存到的文件路径；未保存过为 null。</summary>
+    public string? SavedFilePath { get; set; }
+
+    /// <summary>
+    /// 贴图窗口是否已关闭。识别是异步的，关闭贴图不会中断正在跑的识别，
+    /// 但识别完成后的"写剪贴板 + 弹结果窗"对已关闭的贴图没有意义，
+    /// 调用方用这个标记决定要不要落地结果（否则会出现"剪贴板被悄悄改掉"的怪现象）。
+    /// </summary>
+    public bool IsClosed { get; private set; }
+
     public PinWindow(BitmapSource source, Action<PinWindow>? onClosed = null)
     {
         InitializeComponent();
@@ -73,13 +92,14 @@ public partial class PinWindow : Window
         // 选择文字按钮平时淡显，进入模式后点亮
         SelectTextButton.Opacity = 0.45;
 
-        // 初始尺寸：不超过屏幕的 60%，小图保持原样
+        // 初始尺寸：不超过屏幕的 60%，小图保持原样。
+        // 窗口高度 = 图片高度 + 底部工具条高度（工具条外置在贴图下方，不占贴图区域）。
         var area = ScreenCapture.GetVirtualScreenBounds()
                    ?? new System.Drawing.Rectangle(0, 0, 1920, 1080);
         var scale = Math.Min(1.0, Math.Min(area.Width * 0.6 / source.PixelWidth,
-                                            area.Height * 0.6 / source.PixelHeight));
+                                            (area.Height - ToolbarHeight) * 0.6 / source.PixelHeight));
         Width = Math.Max(80, source.PixelWidth * scale);
-        Height = Math.Max(60, source.PixelHeight * scale);
+        Height = Math.Max(60, source.PixelHeight * scale) + ToolbarHeight;
 
         // 默认放到屏幕右下角附近，避免盖住用户正在看的内容
         var areaDip = ScreenCapture.GetVirtualScreenDip(this);
@@ -93,6 +113,28 @@ public partial class PinWindow : Window
 
         // 缩放/改变窗口尺寸后，高亮矩形要按新的显示比例重画
         ShotImage.SizeChanged += (_, _) => RedrawHighlight();
+    }
+
+    /// <summary>
+    /// 把贴图移动到截图区域附近（区域截图/滚动截长图用）。
+    /// <paramref name="physicalRegion"/> 是虚拟屏幕物理像素坐标，
+    /// 高 DPI 与多屏负坐标都要换算成 DIP，否则位置会漂到主屏右下。
+    /// </summary>
+    public void MoveToRegion(System.Drawing.Rectangle physicalRegion)
+    {
+        var dip = ScreenCapture.ToDip(this, physicalRegion);
+
+        // 区域很小（比如整窗截图贴着窗口边框）时贴图会完全盖住原区域，
+        // 习惯做法是贴在区域正下方；下方放不下再回到正上方。
+        var area = ScreenCapture.GetVirtualScreenDip(this);
+        var top = dip.Bottom + 8;
+        if (top + Height > area.Bottom) top = Math.Max(area.Top, dip.Top - Height - 8);
+
+        var left = dip.Left;
+        if (left + Width > area.Right) left = Math.Max(area.Left, area.Right - Width - 8);
+
+        Left = left;
+        Top = top;
     }
 
     /// <summary>贴图当前是否置顶。</summary>
@@ -178,9 +220,10 @@ public partial class PinWindow : Window
             return;
         }
 
+        // 双击图片：直接关闭预览（恢复原始尺寸改用 Alt+0 或工具条按钮）
         if (e.ClickCount == 2)
         {
-            ResetToOriginalSize();
+            Close();
             e.Handled = true;
             return;
         }
@@ -286,7 +329,7 @@ public partial class PinWindow : Window
 
             width = Math.Max(80, Math.Min(width, _source.PixelWidth * 6.0));
             Width = width;
-            Height = width / _imageAspect;
+            Height = width / _imageAspect + ToolbarHeight;
             UpdateInfo();
         }
     }
@@ -332,7 +375,7 @@ public partial class PinWindow : Window
         var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         var width = Math.Clamp(Width * factor, 60, _source.PixelWidth * 6.0);
         Width = width;
-        Height = width / _imageAspect;
+        Height = width / _imageAspect + ToolbarHeight;
         UpdateInfo();
         e.Handled = true;
     }
@@ -345,7 +388,7 @@ public partial class PinWindow : Window
         var area = ScreenCapture.GetVirtualScreenDip(this);
         var target = Math.Min(_source.PixelWidth, area.Width * 0.9);
         Width = Math.Max(80, target);
-        Height = Width / _imageAspect;
+        Height = Width / _imageAspect + ToolbarHeight;
         UpdateInfo();
     }
 
@@ -513,10 +556,6 @@ public partial class PinWindow : Window
 
     // ---- 工具条 ----
 
-    private void OnToolbarMouseEnter(object sender, MouseEventArgs e) => Toolbar.Opacity = 1.0;
-
-    private void OnToolbarMouseLeave(object sender, MouseEventArgs e) => Toolbar.Opacity = 0.28;
-
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
@@ -525,6 +564,8 @@ public partial class PinWindow : Window
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e) => SaveRequested?.Invoke(this);
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e) => DeleteRequested?.Invoke(this);
 
     private void OnOcrClick(object sender, RoutedEventArgs e) => OcrRequested?.Invoke(this);
 
@@ -580,6 +621,10 @@ public partial class PinWindow : Window
                     ToggleTextSelect();
                     e.Handled = true;
                     return;
+                case Key.Delete:
+                    DeleteRequested?.Invoke(this);
+                    e.Handled = true;
+                    return;
                 case Key.D0 or Key.NumPad0:
                     ResetToOriginalSize();
                     e.Handled = true;
@@ -624,6 +669,7 @@ public partial class PinWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        IsClosed = true;
         _topmostTimer.Stop();
         _flashTimer?.Stop();
         if (Mouse.Captured == this) Mouse.Capture(null);

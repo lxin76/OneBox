@@ -28,6 +28,7 @@ public partial class SettingsCenterWindow : Window
         public required string Key { get; init; }
         public required string Name { get; init; }
         public required string Subtitle { get; init; }
+        public required ImageSource Icon { get; init; }
         public PluginRuntime? Runtime { get; init; }
         public bool IsHost => Runtime is null;
     }
@@ -64,7 +65,11 @@ public partial class SettingsCenterWindow : Window
 
         var entries = new List<Entry>
         {
-            new() { Key = "__host__", Name = "宿主", Subtitle = "OneBox 平台自身的行为" },
+            new()
+            {
+                Key = "__host__", Name = "宿主", Subtitle = "OneBox 平台自身的行为",
+                Icon = PluginIcons.Host,
+            },
         };
 
         foreach (var plugin in _manager.Plugins)
@@ -88,6 +93,7 @@ public partial class SettingsCenterWindow : Window
                 Key = runtime.Manifest.Id,
                 Name = runtime.Manifest.Name,
                 Subtitle = subtitle,
+                Icon = PluginIcons.ForManifest(runtime.Manifest),
                 Runtime = runtime,
             });
         }

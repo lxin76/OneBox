@@ -48,7 +48,6 @@ public partial class ScreenshotSettingsWindow : Window
         QualityText.Text = ((int)QualitySlider.Value).ToString();
 
         CopyCheck.IsChecked = _settings.CopyToClipboard;
-        AutoSaveCheck.IsChecked = _settings.AutoSave;
         PinCheck.IsChecked = _settings.PinTopmost;
 
         WheelBox.Text = _settings.ScrollWheelNotches.ToString();
@@ -57,6 +56,7 @@ public partial class ScreenshotSettingsWindow : Window
 
         LoadOcrLanguages();
         StripSpacesCheck.IsChecked = _settings.OcrStripCjkSpaces;
+        EnhanceCheck.IsChecked = _settings.OcrEnhanceImage;
 
         RegionHotkeyButton.Content = _settings.RegionHotkey;
         FullHotkeyButton.Content = _settings.FullScreenHotkey;
@@ -112,7 +112,13 @@ public partial class ScreenshotSettingsWindow : Window
     }
 
     private static string AppDataSafeDirectory()
-        => Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+    {
+        // 便携模式：不给用户"我的图片"，直接在插件自己的数据目录下选，
+        // 免得默认值把截图散落到系统用户目录里
+        var fallback = Screenshot.Core.AppPaths.DefaultSaveDirectory;
+        Directory.CreateDirectory(fallback);
+        return fallback;
+    }
 
     private void OnOpenSaveDir(object sender, RoutedEventArgs e) => OpenDirectory(_settings.ResolveSaveDirectory());
 
@@ -123,13 +129,7 @@ public partial class ScreenshotSettingsWindow : Window
         Save();
     }
 
-    private void OnAutoSaveChanged(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        _settings.AutoSave = AutoSaveCheck.IsChecked == true;
-        Save();
-    }
-
+    // 自动保存设置项已移除：截图只做预览，保存一律由用户「另存为」选择位置
     private void OnPinChanged(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
@@ -148,6 +148,13 @@ public partial class ScreenshotSettingsWindow : Window
     {
         if (_loading) return;
         _settings.OcrStripCjkSpaces = StripSpacesCheck.IsChecked == true;
+        Save();
+    }
+
+    private void OnEnhanceChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        _settings.OcrEnhanceImage = EnhanceCheck.IsChecked == true;
         Save();
     }
 
@@ -316,12 +323,12 @@ public partial class ScreenshotSettingsWindow : Window
         _settings.Format = defaults.Format;
         _settings.JpegQuality = defaults.JpegQuality;
         _settings.CopyToClipboard = defaults.CopyToClipboard;
-        _settings.AutoSave = defaults.AutoSave;
         _settings.PinTopmost = defaults.PinTopmost;
         _settings.ScrollWheelNotches = defaults.ScrollWheelNotches;
         _settings.ScrollMaxHeight = defaults.ScrollMaxHeight;
         _settings.OcrLanguage = defaults.OcrLanguage;
         _settings.OcrStripCjkSpaces = defaults.OcrStripCjkSpaces;
+        _settings.OcrEnhanceImage = defaults.OcrEnhanceImage;
         _settings.RegionHotkey = defaults.RegionHotkey;
         _settings.FullScreenHotkey = defaults.FullScreenHotkey;
         _settings.ScrollHotkey = defaults.ScrollHotkey;

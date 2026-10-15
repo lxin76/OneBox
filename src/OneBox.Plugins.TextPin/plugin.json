@@ -1,0 +1,9 @@
+{
+  "id": "textpin",
+  "name": "置顶文本",
+  "version": "1.0.0",
+  "description": "常驻置顶的纯文本框：随手记、暂存与复用纯文本，一键复制/粘贴回目标软件，不抢焦点。",
+  "author": "OneBox",
+  "entry": "OneBox.Plugins.TextPin.exe",
+  "protocolVersion": 1
+}

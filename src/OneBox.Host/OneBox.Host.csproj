@@ -9,7 +9,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>OneBox</AssemblyName>
     <RootNamespace>OneBox.Host</RootNamespace>
+    <!-- exe 与任务栏图标（平台图标） -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
 </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 让测试能直接调用只对内部开放的辅助方法（如迁移、路径推导） -->
+    <InternalsVisibleTo Include="OneBox.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
@@ -21,7 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 窗口图标用 ico；界面列表用 256px 的 png（BitmapImage 解不了 .ico） -->
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app.png" />
+    <Resource Include="Assets\plugin-generic.png" />
   </ItemGroup>
 
 </Project>

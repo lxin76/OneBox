@@ -22,7 +22,6 @@ public static class ScreenshotSettingsSchema
     public const string KeyFormat = "format";
     public const string KeyJpegQuality = "jpegQuality";
     public const string KeyCopyToClipboard = "copyToClipboard";
-    public const string KeyAutoSave = "autoSave";
     public const string KeyPinTopmost = "pinTopmost";
     public const string KeyShowToolbarAfterRegion = "showToolbarAfterRegion";
     public const string KeyScrollMinMatchRows = "scrollMinMatchRows";
@@ -30,6 +29,7 @@ public static class ScreenshotSettingsSchema
     public const string KeyScrollWheelNotches = "scrollWheelNotches";
     public const string KeyOcrLanguage = "ocrLanguage";
     public const string KeyOcrStripCjkSpaces = "ocrStripCjkSpaces";
+    public const string KeyOcrEnhanceImage = "ocrEnhanceImage";
 
     // 分组标题
     private const string GroupSave = "保存";
@@ -90,16 +90,6 @@ public static class ScreenshotSettingsSchema
             DefaultValue = JsonSerializer.SerializeToElement(92),
             Min = 1,
             Max = 100,
-        },
-        new SettingDescriptor
-        {
-            Key = KeyAutoSave,
-            Label = "截图后自动保存",
-            Kind = SettingKind.Bool,
-            Group = GroupSave,
-            Description = "开启后不询问，直接保存到保存目录。",
-            Value = JsonSerializer.SerializeToElement(settings.AutoSave),
-            DefaultValue = JsonSerializer.SerializeToElement(false),
         },
         new SettingDescriptor
         {
@@ -189,6 +179,16 @@ public static class ScreenshotSettingsSchema
             Value = JsonSerializer.SerializeToElement(settings.OcrStripCjkSpaces),
             DefaultValue = JsonSerializer.SerializeToElement(true),
         },
+        new SettingDescriptor
+        {
+            Key = KeyOcrEnhanceImage,
+            Label = "小字图像增强",
+            Kind = SettingKind.Bool,
+            Group = GroupOcr,
+            Description = "文字偏小时先放大再识别，提高小字识别率；关闭则直接用原图识别。",
+            Value = JsonSerializer.SerializeToElement(settings.OcrEnhanceImage),
+            DefaultValue = JsonSerializer.SerializeToElement(true),
+        },
     ];
 
     /// <summary>
@@ -223,9 +223,6 @@ public static class ScreenshotSettingsSchema
             case KeyCopyToClipboard:
                 return SetBool(() => settings.CopyToClipboard, v => settings.CopyToClipboard = v, value);
 
-            case KeyAutoSave:
-                return SetBool(() => settings.AutoSave, v => settings.AutoSave = v, value);
-
             case KeyPinTopmost:
                 return SetBool(() => settings.PinTopmost, v => settings.PinTopmost = v, value);
 
@@ -246,6 +243,9 @@ public static class ScreenshotSettingsSchema
 
             case KeyOcrStripCjkSpaces:
                 return SetBool(() => settings.OcrStripCjkSpaces, v => settings.OcrStripCjkSpaces = v, value);
+
+            case KeyOcrEnhanceImage:
+                return SetBool(() => settings.OcrEnhanceImage, v => settings.OcrEnhanceImage = v, value);
 
             default:
                 return false;

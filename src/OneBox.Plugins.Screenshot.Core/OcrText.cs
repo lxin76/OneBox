@@ -44,6 +44,42 @@ public static class OcrText
         return sb.ToString();
     }
 
+    /// <summary>
+    /// 整理"已经带好换行"的版面文本：逐行去空白与中文间空格，
+    /// 但**保留段落之间的空行**（这是与 <see cref="Normalize"/> 的关键差别，
+    /// Normalize 会把空行折叠掉，等于丢掉分段）。
+    /// </summary>
+    public static string NormalizeDocument(string? text, bool stripCjkSpaces)
+    {
+        if (string.IsNullOrEmpty(text)) return "";
+
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var builder = new StringBuilder();
+        var pendingBlank = false;
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+            {
+                // 已写出内容时才记一个待插入的空行，且连续空行只算一个
+                if (builder.Length > 0) pendingBlank = true;
+                continue;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.Append('\n');
+                if (pendingBlank) builder.Append('\n');
+            }
+            pendingBlank = false;
+
+            builder.Append(stripCjkSpaces ? StripCjkSpaces(trimmed) : trimmed);
+        }
+
+        return builder.ToString();
+    }
+
     /// <summary>合并多行 OCR 结果，去掉首尾空白与多余空行。</summary>
     public static string Normalize(string? text, bool stripCjkSpaces)
     {

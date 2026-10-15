@@ -36,12 +36,12 @@ public class ScreenshotSettingsTests
                 Format = ShotImageFormat.Jpeg,
                 JpegQuality = 80,
                 CopyToClipboard = false,
-                AutoSave = true,
                 PinTopmost = false,
                 ScrollWheelNotches = 5,
                 ScrollMaxHeight = 12345,
                 OcrLanguage = "zh-Hans-CN",
                 OcrStripCjkSpaces = false,
+                OcrEnhanceImage = false,
                 RegionHotkey = "Ctrl+Shift+A",
             };
 
@@ -53,12 +53,12 @@ public class ScreenshotSettingsTests
             Assert.Equal(ShotImageFormat.Jpeg, loaded.Format);
             Assert.Equal(80, loaded.JpegQuality);
             Assert.False(loaded.CopyToClipboard);
-            Assert.True(loaded.AutoSave);
             Assert.False(loaded.PinTopmost);
             Assert.Equal(5, loaded.ScrollWheelNotches);
             Assert.Equal(12345, loaded.ScrollMaxHeight);
             Assert.Equal("zh-Hans-CN", loaded.OcrLanguage);
             Assert.False(loaded.OcrStripCjkSpaces);
+            Assert.False(loaded.OcrEnhanceImage);
             Assert.Equal("Ctrl+Shift+A", loaded.RegionHotkey);
         }
         finally
@@ -98,12 +98,12 @@ public class ScreenshotSettingsTests
     }
 
     [Fact]
-    public void 默认热键不与剪贴板插件冲突()
+    public void 默认热键不与置顶文本插件冲突()
     {
         var settings = new ScreenshotSettings();
 
-        // 剪贴板插件占用 Ctrl+Alt+V / Ctrl+Alt+P / Ctrl+Alt+C，截图不能用同样的组合
-        var clipboardKeys = new[] { "Ctrl+Alt+V", "Ctrl+Alt+P", "Ctrl+Alt+C" };
+        // 置顶文本插件占用 Ctrl+Alt+V / Ctrl+Alt+P / Ctrl+Alt+C / Ctrl+Alt+X，截图不能用同样的组合
+        var clipboardKeys = new[] { "Ctrl+Alt+V", "Ctrl+Alt+P", "Ctrl+Alt+C", "Ctrl+Alt+X" };
         var shotKeys = new[]
         {
             settings.RegionHotkey, settings.FullScreenHotkey,

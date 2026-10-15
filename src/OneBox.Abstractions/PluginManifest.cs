@@ -24,6 +24,12 @@ public sealed class PluginManifest
     /// <summary>入口可执行文件，相对插件目录的路径。</summary>
     public string Entry { get; set; } = "";
 
+    /// <summary>
+    /// 图标文件（.ico），相对插件目录的路径，可选。
+    /// 未声明或文件缺失时宿主回退到通用占位图标，不影响插件加载。
+    /// </summary>
+    public string? Icon { get; set; }
+
     /// <summary>传给插件的额外命令行参数。</summary>
     public string[] Arguments { get; set; } = [];
 
@@ -88,6 +94,18 @@ public static partial class ManifestReader
 
         if (!File.Exists(entryPath))
             return new ManifestLoadResult(null, $"入口文件不存在: {manifest.Entry}");
+
+        // 图标是可选装饰：路径越界或文件缺失都只回退到默认图标，不判为损坏插件
+        if (!string.IsNullOrWhiteSpace(manifest.Icon))
+        {
+            var iconPath = Path.GetFullPath(Path.Combine(pluginDirectory, manifest.Icon));
+            if (!IsInside(iconPath, rootPath) || !File.Exists(iconPath))
+                manifest.Icon = null;
+        }
+        else
+        {
+            manifest.Icon = null;
+        }
 
         return new ManifestLoadResult(manifest, null);
     }

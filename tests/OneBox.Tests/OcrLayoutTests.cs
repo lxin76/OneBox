@@ -322,6 +322,39 @@ public class OcrLayoutTests
         Assert.Equal("abc", layout.GetText(selection));
     }
 
+    // ---- 按版式输出文本 ----
+
+    [Fact]
+    public void 版本文本保留每行换行()
+    {
+        var layout = OcrLayout.Build([W("第一行", 0, 0), W("第二行", 0, 40)]);
+
+        Assert.Equal("第一行\n第二行", layout.DocumentText());
+    }
+
+    [Fact]
+    public void 行距大的地方插入空行分段()
+    {
+        // 行高 20，前两行紧邻（行距 20），第三行远在 200 处（行距 160）→ 分段
+        var layout = OcrLayout.Build([W("段一", 0, 0), W("仍在段一", 0, 20), W("段二", 0, 200)]);
+
+        Assert.Equal("段一\n仍在段一\n\n段二", layout.DocumentText());
+    }
+
+    [Fact]
+    public void 空版面的版本文本为空串()
+    {
+        Assert.Equal("", OcrLayout.Build([]).DocumentText());
+    }
+
+    [Fact]
+    public void 单行版面没有多余空行()
+    {
+        var layout = OcrLayout.Build([W("只有一行", 0, 0)]);
+
+        Assert.Equal("只有一行", layout.DocumentText());
+    }
+
     // ---- 文本与边界 ----
 
     [Fact]
