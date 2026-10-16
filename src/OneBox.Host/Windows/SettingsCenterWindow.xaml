@@ -5,12 +5,15 @@
         Icon="pack://application:,,,/Assets/app.ico"
         Width="880" Height="640" MinWidth="720" MinHeight="480"
         WindowStartupLocation="CenterScreen"
-        Background="#16162A" Foreground="#E6E8F0" FontSize="12">
+        Background="{DynamicResource Theme.Window}" Foreground="{DynamicResource Theme.Text}" FontSize="12"
+        SourceInitialized="OnSourceInitialized">
     <Window.Resources>
+        <!-- 颜色一律引用主题键（见 ThemeKeys）：具体色值由 ThemeCatalog 给出，
+             宿主启动时刷进应用资源，换主题时本窗自动重绘。 -->
         <Style TargetType="Button">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#E6E8F0"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.ButtonBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,5"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -25,10 +28,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
@@ -40,38 +43,65 @@
         </Style>
 
         <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#F2F2F2"/>
-            <Setter Property="CaretBrush" Value="#F2F2F2"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.InputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
         </Style>
 
         <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#F2F2F2"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.InputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="Padding" Value="6,3"/>
         </Style>
 
         <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#8A90A6"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
         <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#F2F2F2"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextStrong}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <!-- 选项卡片：整块可点，选中时描边点亮。主题选择与关闭行为都用它。
+             主题这种"要看见配色才算选得准"的项，比下拉框直观得多。 -->
+        <Style x:Key="ChoiceCard" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{DynamicResource Theme.Card}"
+                                BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1"
+                                CornerRadius="8" Padding="10,9">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.CardHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.AccentSoft}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -82,14 +112,14 @@
         </Grid.ColumnDefinitions>
 
         <!-- 左栏：插件列表。选中哪个插件，右侧就显示它的设置 -->
-        <Border Grid.Column="0" Background="#1B1B2F" BorderBrush="#2E2E48" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="{DynamicResource Theme.Surface}" BorderBrush="{DynamicResource Theme.Line}" BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Text="小工具" FontWeight="SemiBold" Foreground="#F2F2F2"
+                <TextBlock Grid.Row="0" Text="小工具" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"
                            Margin="14,14,14,8"/>
 
                 <ListBox x:Name="PluginList" Grid.Row="1"
@@ -109,10 +139,10 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.RowHover}"/>
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="#2E3A5C"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.AccentSoft}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -131,7 +161,7 @@
                                        Margin="0,0,9,0" VerticalAlignment="Center"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                 <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{Binding Name}" Foreground="#F2F2F2" FontSize="12.5"/>
+                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource Theme.TextStrong}" FontSize="12.5"/>
                                     <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Hint}"
                                                Margin="0,2,0,0"/>
                                 </StackPanel>
@@ -150,7 +180,7 @@
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="18,16,18,10">
-                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"/>
                 <TextBlock x:Name="HeaderHint" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
             </StackPanel>
 

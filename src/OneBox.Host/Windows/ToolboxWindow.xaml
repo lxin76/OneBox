@@ -1,16 +1,28 @@
 <Window x:Class="OneBox.Host.Windows.ToolboxWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:OneBox.Host.Converters"
         Title="OneBox 工具箱"
         Icon="pack://application:,,,/Assets/app.ico"
-        Width="820" Height="620" MinWidth="640" MinHeight="440"
+        Width="860" Height="640" MinWidth="680" MinHeight="460"
         WindowStartupLocation="CenterScreen"
-        Background="#16162A" Foreground="#E6E8F0" FontSize="12">
+        Background="{DynamicResource Theme.Window}" Foreground="{DynamicResource Theme.Text}" FontSize="12"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
+        SourceInitialized="OnSourceInitialized">
     <Window.Resources>
+        <!-- 转换器：模板里多处按布尔值切换可见性/启用状态，
+             缺了这几个资源会让整棵树在渲染时抛 XamlParseException -->
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+        <conv:InverseBoolConverter x:Key="InverseBool"/>
+        <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
+
+        <!-- 颜色一律引用主题键（键名与插件共用，见 ThemeKeys），具体色值由
+             ThemeCatalog 给出、宿主启动时刷进应用资源。这里不再写死色值：
+             换主题时整窗自动重绘，也不需要改这个文件。 -->
         <Style TargetType="Button">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#E6E8F0"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.ButtonBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,5"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -25,10 +37,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
@@ -40,55 +52,196 @@
         </Style>
 
         <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="#B8BDD0"/>
-            <Setter Property="Padding" Value="14,6"/>
-        </Style>
-
         <Style x:Key="Badge" TargetType="Border">
-            <Setter Property="Background" Value="#2A2A44"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.BadgeBg}"/>
             <Setter Property="CornerRadius" Value="4"/>
             <Setter Property="Padding" Value="6,1"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
         </Style>
 
         <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#8A90A6"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
+
+        <Style x:Key="Pill" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Theme.CardHover}"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="8,1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- ==================== 页签样式 ====================
+             原生 TabItem 在深色主题下是灰色方角块，选中态几乎看不出来。
+             这里整块重写：外层容器负责底部分隔线，每个页签是一枚圆角药丸，
+             选中时填强调色并点亮文字，悬停给一层淡底色，未选中只留灰字。 -->
+        <Style x:Key="ToolboxTabItem" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TabInactive}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Padding" Value="16,7"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="7"
+                                Padding="{TemplateBinding Padding}" Margin="0,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" x:Name="Content"
+                                                  ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                <TextBlock Grid.Column="1" x:Name="CountBadge" Text=""
+                                           Margin="7,0,0,0" FontSize="10.5"
+                                           Foreground="{DynamicResource Theme.TabInactive}"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.TabHover}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Theme.TabHoverText}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.AccentSoft}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Theme.AccentText}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.AccentHover}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolboxTabControl" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 页签条：药丸行 + 一条贯穿的分隔线 -->
+                            <Grid Grid.Row="0">
+                                <Border Height="1" Background="{DynamicResource Theme.Line}" VerticalAlignment="Bottom"/>
+                                <TabPanel IsItemsHost="True" Margin="0,0,0,6"
+                                          Background="Transparent" Panel.ZIndex="1"/>
+                            </Grid>
+
+                            <Border Grid.Row="1" Margin="0,8,0,0"
+                                    Background="Transparent" BorderThickness="0">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 热键分组内的行 -->
+        <Style x:Key="HotkeyKeyText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas, Cascadia Mono, Consolas"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextStrong}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- 可展开的热键分组卡片头 -->
+        <Style x:Key="GroupHeaderButton" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="7" Padding="10,9">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.CardHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <Grid Margin="16,14,16,14">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- 顶部：标题与全局操作 -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-                <TextBlock Text="OneBox 小工具平台" FontSize="17" FontWeight="SemiBold" Foreground="#F2F2F2"/>
-                <TextBlock x:Name="SummaryText" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
-            </StackPanel>
-            <Button Grid.Column="1" Content="安装小工具…" Click="OnInstallClick" Margin="0,0,8,0" VerticalAlignment="Top"/>
-            <Button Grid.Column="2" Content="打开插件目录" Click="OnOpenPluginsDir" VerticalAlignment="Top"/>
-        </Grid>
+        <!-- ==================== 页头 ====================
+             系统标题栏由 DWM 染成深色（见 DarkTitleBar），这里在客户区顶部再放一条
+             与之一致的设计化页头：应用图标 + 产品名 + 「工具箱」标识，右侧是全局操作。
+             窗口框架本身不接管，拖动/最大化/贴边分屏仍由系统负责。 -->
+        <Border Grid.Row="0" Background="{DynamicResource Theme.Surface}" BorderBrush="{DynamicResource Theme.Line}" BorderThickness="1"
+                CornerRadius="9" Padding="14,11" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-        <TabControl Grid.Row="1" Background="#16162A" BorderBrush="#2E2E48">
+                <Image Grid.Column="0" Source="pack://application:,,,/Assets/app.png"
+                       Width="28" Height="28" Margin="0,0,12,0" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="OneBox 小工具平台" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Theme.TextStrong}" VerticalAlignment="Center"/>
+                        <Border Background="{DynamicResource Theme.AccentSoft}" CornerRadius="4" Padding="6,1" Margin="9,0,0,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="工具箱" FontSize="10.5" Foreground="{DynamicResource Theme.AccentText}"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock x:Name="SummaryText" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="安装小工具…" Click="OnInstallClick" Margin="0,0,8,0"/>
+                    <Button Content="打开插件目录" Click="OnOpenPluginsDir" Margin="0,0,8,0"/>
+                    <!-- 设置入口收成齿轮图标：这一排已经有文字按钮，再加一个太占地方 -->
+                    <Button Content="&#x2699;" FontSize="14" Padding="11,4" Click="OnOpenSettingsClick"
+                            ToolTip="设置：主题外观、插件运行与目录"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="1" Style="{StaticResource ToolboxTabControl}"
+                    ItemContainerStyle="{StaticResource ToolboxTabItem}">
             <TabItem Header="小工具">
-                <Grid Margin="4,10,4,4">
+                <Grid Margin="2,6,2,2">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
@@ -115,7 +268,7 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="#1E1E36" BorderBrush="#2E2E48" BorderThickness="1"
+                                <Border Background="{DynamicResource Theme.Card}" BorderBrush="{DynamicResource Theme.Line}" BorderThickness="1"
                                         CornerRadius="8" Padding="14,12">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -129,11 +282,11 @@
                                                        Margin="0,0,10,0" VerticalAlignment="Center"
                                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                                 <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
-                                                           Foreground="#F2F2F2" VerticalAlignment="Center"/>
+                                                           Foreground="{DynamicResource Theme.TextStrong}" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding VersionText}" Style="{StaticResource Hint}"
                                                            Margin="8,0,0,0" VerticalAlignment="Center"/>
                                                 <Border Style="{StaticResource Badge}" Margin="8,0,0,0">
-                                                    <TextBlock Text="{Binding SourceText}" FontSize="10" Foreground="#9AB4FF"/>
+                                                    <TextBlock Text="{Binding SourceText}" FontSize="10" Foreground="{DynamicResource Theme.AccentText}"/>
                                                 </Border>
                                             </StackPanel>
 
@@ -142,7 +295,7 @@
 
                                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                                 <TextBlock Text="状态：" Style="{StaticResource Hint}"/>
-                                                <TextBlock Text="{Binding StateText}" FontSize="11" Foreground="#7CE38B"
+                                                <TextBlock Text="{Binding StateText}" FontSize="11" Foreground="{DynamicResource Theme.Ok}"
                                                            Margin="0,0,10,0"/>
                                                 <TextBlock Text="{Binding StatusText}" Style="{StaticResource Hint}"/>
                                             </StackPanel>
@@ -153,11 +306,11 @@
                                             </StackPanel>
 
                                             <TextBlock Text="{Binding CrashText}" Style="{StaticResource Hint}"
-                                                       Foreground="#FFB454" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource Theme.Warn}" Margin="0,4,0,0"
                                                        Visibility="{Binding HasCrashInfo, Converter={StaticResource BoolToVisibility}}"/>
 
                                             <TextBlock Text="{Binding ErrorText}" Style="{StaticResource Hint}"
-                                                       Foreground="#FF9A9A" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource Theme.Error}" Margin="0,4,0,0"
                                                        Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}"/>
                                         </StackPanel>
 
@@ -168,7 +321,7 @@
                                             <Button Content="重启" Click="OnRestartClick"
                                                     IsEnabled="{Binding CanRestart}" Margin="0,0,6,0"/>
                                             <Button Content="卸载" Click="OnUninstallClick"
-                                                    IsEnabled="{Binding CanUninstall}" Foreground="#FF9A9A"/>
+                                                    IsEnabled="{Binding CanUninstall}" Foreground="{DynamicResource Theme.Error}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -184,43 +337,198 @@
             </TabItem>
 
             <TabItem Header="热键">
-                <StackPanel Margin="8,12,8,8">
-                    <TextBlock Text="所有小工具的全局热键都由宿主统一注册，因此能显示互相冲突的项。"
-                               Style="{StaticResource Hint}" Margin="0,0,0,10"/>
-                    <ItemsControl x:Name="HotkeyList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#1E1E36" BorderBrush="#2E2E48" BorderThickness="1"
-                                        CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="170"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Combination}" FontFamily="Consolas"
-                                                   Foreground="#F2F2F2" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Description}"
-                                                   Style="{StaticResource Hint}" VerticalAlignment="Center"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding Status}" FontSize="11"
-                                                   VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock x:Name="NoHotkeyHint" Text="当前没有小工具声明全局热键。"
-                               Style="{StaticResource Hint}"/>
-                </StackPanel>
+                <Grid Margin="2,6,2,2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="2,0,2,10">
+                        <TextBlock
+                            Text="所有小工具的全局热键都由宿主统一注册。组合键重复的项会以红色高亮并标出与谁冲突；热键按小工具分组，展开某一组即可只看它的热键。"
+                            Style="{StaticResource Hint}"/>
+
+                        <!-- 冲突横幅：不展开分组也能看到"平台里有几个键撞了" -->
+                        <Border x:Name="HotkeyConflictBanner" Background="{DynamicResource Theme.ErrorWash}" BorderBrush="{DynamicResource Theme.ErrorLine}"
+                                BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="0,8,0,0"
+                                Visibility="Collapsed">
+                            <TextBlock x:Name="HotkeyConflictText" Foreground="{DynamicResource Theme.Error}" FontSize="11.5"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- 过滤框：插件多起来后，按插件名/热键/用途就地筛出目标 -->
+                    <Grid Grid.Row="1" Margin="2,0,2,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Background="{DynamicResource Theme.Card}" BorderBrush="{DynamicResource Theme.Line}" BorderThickness="1" CornerRadius="6">
+                            <Grid>
+                                <TextBox x:Name="HotkeyFilterBox" Background="Transparent" BorderThickness="0"
+                                         Foreground="{DynamicResource Theme.TextInput}" CaretBrush="{DynamicResource Theme.TextInput}" Padding="9,6"
+                                         TextChanged="OnHotkeyFilterChanged"/>
+                                <TextBlock x:Name="HotkeyFilterWatermark" Text="筛选热键：输入小工具名、组合键或用途…"
+                                           Foreground="{DynamicResource Theme.TextFaint}" FontSize="12" Margin="10,0,0,0"
+                                           VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                            <Button Content="全部展开" Click="OnExpandAllHotkeys" Margin="0,0,6,0" Padding="10,5"/>
+                            <Button Content="全部折叠" Click="OnCollapseAllHotkeys" Padding="10,5"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+                        <ItemsControl x:Name="HotkeyGroupList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource Theme.Surface}" BorderBrush="{DynamicResource Theme.Line}" BorderThickness="1"
+                                            CornerRadius="9" Margin="2,0,2,10" Padding="4,4,4,6">
+                                        <StackPanel>
+                                            <!-- 分组头：图标 + 小工具名 + 数量 + 展开箭头 -->
+                                            <ToggleButton Style="{StaticResource GroupHeaderButton}"
+                                                          IsChecked="{Binding IsExpanded, Mode=TwoWay}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0" Text="▸" Foreground="{DynamicResource Theme.TextMuted}"
+                                                               FontSize="11" VerticalAlignment="Center"
+                                                               Margin="0,0,8,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+                                                                <Setter Property="LayoutTransform">
+                                                                    <Setter.Value>
+                                                                        <RotateTransform Angle="0"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                        <Setter Property="LayoutTransform">
+                                                                            <Setter.Value>
+                                                                                <RotateTransform Angle="90"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Theme.AccentText}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <Image Grid.Column="1" Source="{Binding Icon}" Width="20" Height="20"
+                                                           Margin="0,0,9,0" VerticalAlignment="Center"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding PluginName}" FontSize="13"
+                                                                   FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"/>
+                                                        <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Hint}"
+                                                                   Margin="0,2,0,0"/>
+                                                    </StackPanel>
+
+                                                    <Border Grid.Column="3" Style="{StaticResource Pill}" Margin="8,0,8,0">
+                                                        <TextBlock Text="{Binding CountText}" FontSize="10.5"
+                                                                   Foreground="{DynamicResource Theme.TextMuted}"/>
+                                                    </Border>
+
+                                                    <TextBlock Grid.Column="4" Text="{Binding HealthText}"
+                                                               FontSize="11" VerticalAlignment="Center"
+                                                               Foreground="{Binding HealthBrush}"/>
+                                                </Grid>
+                                            </ToggleButton>
+
+                                            <!-- 分组内容：未展开时折叠（可见性由转换器驱动） -->
+                                            <ItemsControl ItemsSource="{Binding Items}" Margin="4,2,4,2"
+                                                          Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <!-- 冲突行整体高亮：底色泛红 + 左侧红条 + 红色边框，
+                                                             三重强调，保证在一屏热键里能一眼扫到 -->
+                                                        <Border Background="{Binding RowBackground}"
+                                                                BorderThickness="1" CornerRadius="6"
+                                                                Padding="10,8" Margin="0,0,0,5">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.LineSoft}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding HasConflict}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Theme.ErrorLine}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="150"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+
+                                                                <Border Grid.Column="0" Grid.Row="0" Width="3" CornerRadius="2"
+                                                                        Background="{Binding AccentBrush}"
+                                                                        Margin="0,1,10,1"/>
+
+                                                                <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Combination}"
+                                                                           Style="{StaticResource HotkeyKeyText}"/>
+
+                                                                <TextBlock Grid.Column="2" Grid.Row="0" Text="{Binding Description}"
+                                                                           Style="{StaticResource Hint}"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,0,10,0"/>
+
+                                                                <TextBlock Grid.Column="3" Grid.Row="0" Text="{Binding Status}"
+                                                                           FontSize="11" VerticalAlignment="Center"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="{Binding StatusBrush}"/>
+
+                                                                <!-- 冲突详情：点名是哪个小工具的哪条热键撞了，
+                                                                     用户不必自己去别的分组里翻找 -->
+                                                                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                                                           Text="{Binding ConflictDetail}"
+                                                                           Foreground="{DynamicResource Theme.Error}" FontSize="11"
+                                                                           TextWrapping="Wrap" Margin="0,5,0,1"
+                                                                           Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <TextBlock x:Name="NoHotkeyHint" Grid.Row="2" Text="当前没有小工具声明全局热键。"
+                               Style="{StaticResource Hint}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
             </TabItem>
 
             <TabItem Header="目录与日志">
-                <StackPanel Margin="8,12,8,8">
-                    <TextBlock Text="插件目录" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                <StackPanel Margin="2,6,2,2">
+                    <TextBlock Text="插件目录" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"/>
                     <TextBlock x:Name="PluginsDirText" Style="{StaticResource Hint}" Margin="0,4,0,10"/>
-                    <TextBlock Text="插件数据目录（每个小工具的私有设置保存在这里）" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                    <TextBlock Text="插件数据目录（每个小工具的私有设置保存在这里）" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"/>
                     <TextBlock x:Name="DataDirText" Style="{StaticResource Hint}" Margin="0,4,0,10"/>
-                    <TextBlock Text="日志目录" FontWeight="SemiBold" Foreground="#F2F2F2"/>
+                    <TextBlock Text="日志目录" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextStrong}"/>
                     <TextBlock x:Name="LogDirText" Style="{StaticResource Hint}" Margin="0,4,0,12"/>
                     <StackPanel Orientation="Horizontal">
                         <Button Content="打开插件目录" Click="OnOpenPluginsDir" Margin="0,0,8,0"/>

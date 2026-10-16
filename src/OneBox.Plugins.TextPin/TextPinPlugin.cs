@@ -1,6 +1,7 @@
 using System.Windows.Threading;
 using OneBox.Abstractions;
 using OneBox.Plugin.Sdk;
+using OneBox.Plugin.Sdk.Wpf;
 using OneBox.Plugins.TextPin.Core;
 using OneBox.Plugins.TextPin.Services;
 using OneBox.Plugins.TextPin.Windows;
@@ -61,12 +62,16 @@ public sealed class TextPinPlugin : IAsyncDisposable
     /// </summary>
     public async Task StartAsync()
     {
+        // 跟随宿主主题：置顶窗与设置窗里的颜色都引用主题键，这里把调色板刷进应用资源
+        PluginTheme.Attach(_context);
+
         // 宿主分配的数据目录：文本与设置都放在这里，卸载时可一并清理
         AppPaths.Initialize(_context.DataDirectory);
         Settings = SettingsStore.Load();
 
         _currentText = PinnedTextStore.Load();
         _window = new PinnedWindow(this);
+        PluginTheme.ApplyToWindow(_window);
         _window.SetTextSilently(_currentText);
 
         _context.HotkeyPressed += OnHotkeyPressed;
@@ -296,7 +301,18 @@ public sealed class TextPinPlugin : IAsyncDisposable
         // 热键里若还按着 Alt/Ctrl，注入的 Ctrl+C 会变成别的组合，必须先等修饰键松开
         PasteService.RunAfterModifiersReleased(() =>
         {
-            var result = SelectionCapture.CaptureSelectedText(restoreTarget);
+            // 这是插件里唯一跑在裸后台线程上的流程，任何未捕获异常都会直接终止进程
+            // （宿主表现为"插件崩溃并重启"）。抓取失败只需要提示用户，不该赔上整个插件。
+            CaptureResult result;
+            try
+            {
+                result = SelectionCapture.CaptureSelectedText(restoreTarget);
+            }
+            catch (Exception ex)
+            {
+                result = CaptureResult.Fail($"抓取过程异常：{ex.Message}");
+                WriteLog($"抓取选中文字异常：{ex}");
+            }
 
             _dispatcher.BeginInvoke(new Action(() =>
             {

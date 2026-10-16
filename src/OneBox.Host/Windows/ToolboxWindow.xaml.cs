@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using OneBox.Abstractions;
+using OneBox.Abstractions.Theming;
 using OneBox.Host.Services;
 using OneBox.Host.ViewModels;
 
@@ -13,6 +14,23 @@ public partial class ToolboxWindow : Window
 {
     private readonly PluginManager _manager;
     private readonly PluginRegistry _registry;
+
+    /// <summary>热键页当前的分组（整体重建，数量很小）。</summary>
+    private List<HotkeyGroupViewModel> _hotkeyGroups = [];
+
+    /// <summary>
+    /// 窗口句柄就绪后，把系统标题栏切成与当前主题一致的明暗。
+    /// 不接管窗口框架：拖动、最大化、贴边分屏仍由系统负责。
+    /// </summary>
+    private void OnSourceInitialized(object sender, EventArgs e)
+        => DarkTitleBar.Apply(this, ThemeManager.Current.IsDark);
+
+    /// <summary>
+    /// 换主题后重建列表：窗口本身的颜色走 DynamicResource 会自动更新，
+    /// 但热键行的状态色是视图模型算出来的画刷（绑定到属性），只能靠重建换新。
+    /// </summary>
+    private void OnThemeChanged(ThemePalette theme) => Dispatcher.BeginInvoke(Rebuild);
+
 
     public ToolboxWindow(PluginManager manager, PluginRegistry registry)
     {
@@ -32,6 +50,7 @@ public partial class ToolboxWindow : Window
             _manager.Changed += OnManagerChanged;
             _manager.StatusChanged += OnPluginStatusChanged;
             _manager.MenuChanged += Rebuild;
+            ThemeManager.Changed += OnThemeChanged;
             Rebuild();
         };
         Closed += (_, _) =>
@@ -39,6 +58,7 @@ public partial class ToolboxWindow : Window
             _manager.Changed -= OnManagerChanged;
             _manager.StatusChanged -= OnPluginStatusChanged;
             _manager.MenuChanged -= Rebuild;
+            ThemeManager.Changed -= OnThemeChanged;
         };
     }
 
@@ -64,26 +84,131 @@ public partial class ToolboxWindow : Window
 
         EmptyHint.Visibility = ViewModel.Plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         UpdateHotkeyList();
-        FooterHint.Text = $"插件目录：{HostPaths.PluginsDirectory}";
+
+        // 底部状态行只留给「重启中 / 已安装 / 已卸载」这类临时提示。
+        // 插件目录已经在「目录与日志」页签里给出路径和打开按钮，这里不再重复显示；
+        // 顺带清掉上一条临时提示，免得刷新后残留一句过期的消息。
+        FooterHint.Text = string.Empty;
 
         if (selectedId is not null)
             PluginList.SelectedItem = ViewModel.Plugins.FirstOrDefault(p => p.Id == selectedId);
     }
 
+    /// <summary>
+    /// 重建热键页：按小工具分组，而不是把全部热键平铺成一列。
+    ///
+    /// 平铺时插件一多就退化成一大片看不出归属的行，想找某个小工具的热键只能靠肉眼扫。
+    /// 这里以「小工具」为第一层：每组一张卡片，展开才看到它自己的热键，
+    /// 组头直接给出数量与冲突概况，一眼能定位到出问题的那一个。
+    /// </summary>
     private void UpdateHotkeyList()
     {
-        var rows = _manager.AllHotkeys
-            .Select(h => new
+        // 保留展开/折叠状态与滚动位置，避免每次刷新（插件状态一有变化就会重建）后
+        // 用户刚展开的分组又被合上、看到一半的列表跳回顶部
+        var expandedState = _hotkeyGroups.ToDictionary(
+            g => g.PluginId, g => g.IsExpanded, StringComparer.OrdinalIgnoreCase);
+
+        var sources = _manager.Plugins
+            .Where(p => p.Manifest is not null)
+            .Select(p => new HotkeyGroupSource
             {
-                h.Combination,
-                Description = string.IsNullOrWhiteSpace(h.Description) ? h.ActionId : h.Description,
-                Status = h.Registered ? "已生效" : $"未生效：{h.Error}",
+                PluginId = p.Manifest!.Id,
+                PluginName = p.Manifest.Name,
+                Running = p.Runtime?.State == PluginState.Running,
+                Hotkeys = p.Runtime?.Hotkeys ?? [],
             })
-            .OrderBy(r => r.Combination, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        HotkeyList.ItemsSource = rows;
-        NoHotkeyHint.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        var groups = HotkeyGroupBuilder.Build(sources);
+
+        _hotkeyGroups = [.. groups.Select(g => new HotkeyGroupViewModel(g, IconFor(g.PluginId))
+        {
+            // 默认展开；之前手动折叠过的分组维持折叠
+            IsExpanded = !expandedState.TryGetValue(g.PluginId, out var expanded) || expanded,
+        })];
+
+        ApplyHotkeyFilter();
+        UpdateHotkeyConflictBanner();
+    }
+
+    /// <summary>
+    /// 刷新冲突横幅：把全部小工具的冲突汇总成一句"哪个小工具的哪个键和谁撞了"。
+    /// 不展开分组也能看到问题，这是冲突检测的实际价值所在。
+    /// </summary>
+    private void UpdateHotkeyConflictBanner()
+    {
+        var conflicts = _hotkeyGroups
+            .SelectMany(g => g.AllItems.Select(i => (Group: g, Row: i)))
+            .Where(x => x.Row.HasConflict)
+            .ToList();
+
+        if (conflicts.Count == 0)
+        {
+            HotkeyConflictBanner.Visibility = Visibility.Collapsed;
+            HotkeyConflictText.Text = "";
+            return;
+        }
+
+        var lines = conflicts.Select(x => $"· {x.Group.PluginName}「{x.Row.Combination}」{x.Row.ConflictDetail}");
+
+        HotkeyConflictText.Text =
+            $"检测到 {conflicts.Count} 个热键冲突（组合键与其他热键重复，需改键才能生效）：\n"
+            + string.Join("\n", lines);
+
+        HotkeyConflictBanner.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>分组头用的插件图标；插件已被卸载时退回通用占位图标。</summary>
+    private System.Windows.Media.ImageSource IconFor(string pluginId)
+    {
+        var manifest = _manager.Plugins
+            .FirstOrDefault(p => string.Equals(p.Manifest?.Id, pluginId, StringComparison.OrdinalIgnoreCase))
+            ?.Manifest;
+
+        return PluginIcons.ForManifest(manifest);
+    }
+
+    /// <summary>按筛选框关键字过滤分组；关键字为空则显示全部。</summary>
+    private void ApplyHotkeyFilter()
+    {
+        var keyword = HotkeyFilterBox.Text;
+        var searching = !string.IsNullOrWhiteSpace(keyword);
+
+        // 筛选只收窄每组要显示的行，不重建分组对象：
+        // 重建会把用户手动折叠的状态一起冲掉，搜索框里每敲一个字都会跳一下
+        var filtered = _hotkeyGroups.Where(g => g.ApplyFilter(keyword)).ToList();
+
+        // 搜索时一律展开：用户既然主动搜了，就是想直接看到命中的行
+        if (searching)
+            foreach (var group in filtered) group.IsExpanded = true;
+
+        HotkeyGroupList.ItemsSource = filtered;
+
+        HotkeyFilterWatermark.Visibility = string.IsNullOrEmpty(HotkeyFilterBox.Text)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        NoHotkeyHint.Text = _hotkeyGroups.Count == 0
+            ? "当前没有小工具声明全局热键。"
+            : "没有匹配的热键——换个关键字，或清空筛选框。";
+        NoHotkeyHint.Visibility = filtered.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHotkeyFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        => ApplyHotkeyFilter();
+
+    private void OnExpandAllHotkeys(object sender, RoutedEventArgs e) => SetAllHotkeyGroupsExpanded(true);
+
+    private void OnCollapseAllHotkeys(object sender, RoutedEventArgs e) => SetAllHotkeyGroupsExpanded(false);
+
+    /// <summary>
+    /// 全部展开 / 全部折叠。
+    /// 只改 _hotkeyGroups 即可：筛选不重建视图模型，界面上显示的始终是它的子集，
+    /// 改完这些对象，已过滤掉的分组下次出现时也自然是同一状态。
+    /// </summary>
+    private void SetAllHotkeyGroupsExpanded(bool expanded)
+    {
+        foreach (var group in _hotkeyGroups) group.IsExpanded = expanded;
     }
 
     // ---- 插件操作 ----
@@ -169,6 +294,13 @@ public partial class ToolboxWindow : Window
             ? $"已卸载 {name}，并删除其数据。"
             : $"已卸载 {name}（保留了它的数据，重新安装后可继续使用）。";
     }
+
+    /// <summary>
+    /// 页头的「设置…」按钮：与托盘菜单的「设置…」是同一个入口，统一交给 App 管理，
+    /// 已打开时由它把窗口激活，不会点一次多出一个设置窗口。
+    /// </summary>
+    private void OnOpenSettingsClick(object sender, RoutedEventArgs e)
+        => (Application.Current as App)?.OpenSettingsCenter();
 
     private void OnInstallClick(object sender, RoutedEventArgs e)
     {

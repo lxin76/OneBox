@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using OneBox.Abstractions;
+using OneBox.Abstractions.Theming;
 using OneBox.Host.Services;
 
 namespace OneBox.Host.Windows;
@@ -21,6 +22,13 @@ public partial class SettingsCenterWindow : Window
 {
     private readonly PluginManager _manager;
     private readonly PluginRegistry _registry;
+
+    /// <summary>
+    /// 窗口句柄就绪后把系统标题栏切成深色，与工具箱窗口保持一致。
+    /// 不接管窗口框架，拖动/最大化/贴边分屏仍由系统负责。
+    /// </summary>
+    private void OnSourceInitialized(object sender, EventArgs e)
+        => DarkTitleBar.Apply(this, ThemeManager.Current.IsDark);
 
     /// <summary>左栏每一项：要么是宿主，要么是某个插件。</summary>
     private sealed class Entry
@@ -164,11 +172,13 @@ public partial class SettingsCenterWindow : Window
     {
         var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
 
-        panel.Children.Add(new TextBlock
+        var label = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(descriptor.Label) ? descriptor.Key : descriptor.Label,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xE8, 0xF0)),
-        });
+        };
+        // 代码构建的控件也要跟着主题走：SetResourceReference 就是代码版的 DynamicResource
+        label.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.ResourceKey(ThemeKeys.Text));
+        panel.Children.Add(label);
 
         var editor = BuildEditor(runtime, descriptor);
         editor.Margin = new Thickness(0, 4, 0, 0);
@@ -427,7 +437,11 @@ public partial class SettingsCenterWindow : Window
     {
         var settings = _registry.Settings;
 
-        AddSection("插件运行");
+        AddSection("外观");
+        FormHost.Children.Add(BuildThemeChooser());
+        FormHost.Children.Add(Hint("主题同时作用于宿主窗口与各小工具的窗口，点一下立即生效并保存。"));
+
+        AddSection("插件运行", topMargin: 16);
 
         var autoRestart = new CheckBox
         {
@@ -449,10 +463,14 @@ public partial class SettingsCenterWindow : Window
 
         AddSection("宿主行为", topMargin: 16);
 
+        FormHost.Children.Add(BuildCloseBehaviorChooser());
+        FormHost.Children.Add(Hint("两个窗口都开着时，关掉其中一个不会退出；全部关掉才按这里的选择执行。"));
+
         var autoStart = new CheckBox
         {
             Content = "开机自动启动 OneBox",
             IsChecked = AutoStartService.IsEnabled(),
+            Margin = new Thickness(0, 10, 0, 0),
         };
         FormHost.Children.Add(autoStart);
 
@@ -468,6 +486,15 @@ public partial class SettingsCenterWindow : Window
             Margin = new Thickness(0, 8, 0, 0),
         };
         FormHost.Children.Add(showToolbox);
+
+        var contextMenu = new CheckBox
+        {
+            Content = "把「OneBox 小工具」加进桌面与文件夹的右键菜单",
+            IsChecked = settings.AddToContextMenu,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        FormHost.Children.Add(contextMenu);
+        FormHost.Children.Add(Hint("勾选后不用先去找托盘图标：在桌面或文件夹空白处右键，就能直接打开工具箱、设置或某个小工具的窗口。"));
 
         AddSection("目录", topMargin: 16);
         FormHost.Children.Add(Hint($"插件安装位置：{HostPaths.PluginsDirectory}"));
@@ -486,6 +513,8 @@ public partial class SettingsCenterWindow : Window
         showToolbox.Unchecked += OnHostSettingChanged;
         autoStart.Checked += (_, _) => ApplyAutoStart(true, autoStartTip);
         autoStart.Unchecked += (_, _) => ApplyAutoStart(false, autoStartTip);
+        contextMenu.Checked += (_, _) => ApplyContextMenu(true);
+        contextMenu.Unchecked += (_, _) => ApplyContextMenu(false);
 
         maxBox.LostFocus += (_, _) => ApplyMaxRestart(maxBox);
         maxBox.KeyDown += (_, e) =>
@@ -501,6 +530,152 @@ public partial class SettingsCenterWindow : Window
             _registry.Settings.ShowToolboxOnStartup = showToolbox.IsChecked == true;
             _registry.Save();
         }
+    }
+
+    /// <summary>
+    /// 主题选择：每个主题一张卡片（带配色预览），整卡可点。
+    /// 切换立即写设置、刷宿主资源，并经 App 广播给所有插件进程。
+    /// </summary>
+    private FrameworkElement BuildThemeChooser()
+    {
+        // 用实际生效的主题而不是设置里的原始值：设置里若存着已删掉的 id，
+        // ThemeManager 会回退到默认主题，卡片也应跟着选中默认那一张
+        var currentId = ThemeManager.Current.Id;
+        var panel = new StackPanel();
+
+        foreach (var theme in ThemeCatalog.All)
+        {
+            var radio = new RadioButton
+            {
+                Style = (Style)FindResource("ChoiceCard"),
+                GroupName = "OneBoxTheme",
+                Margin = new Thickness(0, 0, 0, 6),
+                Content = BuildThemeCard(theme),
+                // 先赋值再挂事件：初始化时的选中不该被当成一次用户改动
+                IsChecked = string.Equals(theme.Id, currentId, StringComparison.OrdinalIgnoreCase),
+            };
+            radio.Checked += (_, _) => ApplyTheme(theme);
+            panel.Children.Add(radio);
+        }
+
+        return panel;
+    }
+
+    /// <summary>主题卡片的正面：配色预览条 + 主题名 + 一句话说明。</summary>
+    private static FrameworkElement BuildThemeCard(ThemePalette theme)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var swatches = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        foreach (var key in new[] { ThemeKeys.Window, ThemeKeys.Surface, ThemeKeys.Accent })
+        {
+            swatches.Children.Add(new Border
+            {
+                Width = 20,
+                Height = 20,
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(0, 0, 3, 0),
+                Background = ThemeManager.BrushFor(theme, key),
+                BorderBrush = ThemeManager.BrushFor(theme, ThemeKeys.Border),
+                BorderThickness = new Thickness(1),
+            });
+        }
+        grid.Children.Add(swatches);
+
+        var text = BuildOptionCard(theme.DisplayName, theme.Description);
+        text.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        return grid;
+    }
+
+    /// <summary>卡片的正面：标题 + 一句话说明。主题卡片与关闭行为卡片共用。</summary>
+    private static FrameworkElement BuildOptionCard(string title, string description)
+    {
+        var text = new StackPanel();
+        var name = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold };
+        name.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.ResourceKey(ThemeKeys.TextStrong));
+        text.Children.Add(name);
+
+        var detail = new TextBlock
+        {
+            Text = description,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        detail.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.ResourceKey(ThemeKeys.TextMuted));
+        text.Children.Add(detail);
+
+        return text;
+    }
+
+    /// <summary>换主题：落地到宿主设置并立刻应用（App 会顺带刷新标题栏、广播给插件）。</summary>
+    private void ApplyTheme(ThemePalette theme)
+    {
+        _registry.Settings.Theme = theme.Id;
+        _registry.Save();
+        ThemeManager.Apply(theme);
+    }
+
+    /// <summary>
+    /// 关闭窗口时的行为：两个选项各一张卡片，点一下立即保存、下次关窗口生效。
+    /// 刚装好时这里是空的（还没问过），第一次关窗口会被问一次，选择写进同一处设置。
+    /// </summary>
+    private FrameworkElement BuildCloseBehaviorChooser()
+    {
+        var current = CloseWindowActions.Normalize(_registry.Settings.CloseWindowAction);
+        var host = new StackPanel();
+
+        var caption = new TextBlock { Text = "关闭窗口时：", Margin = new Thickness(0, 0, 0, 6) };
+        caption.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.ResourceKey(ThemeKeys.Text));
+        host.Children.Add(caption);
+
+        (string Value, string Title, string Description)[] options =
+        [
+            (CloseWindowActions.CloseWindowOnly, "只关闭窗口", "OneBox 继续留在托盘，随时可以从托盘图标再打开。"),
+            (CloseWindowActions.ExitApp, "关闭的同时退出 OneBox", "窗口关掉就直接结束进程，不用再去托盘右键退出。"),
+        ];
+
+        foreach (var (value, title, description) in options)
+        {
+            var radio = new RadioButton
+            {
+                Style = (Style)FindResource("ChoiceCard"),
+                GroupName = "OneBoxCloseBehavior",
+                Margin = new Thickness(0, 0, 0, 6),
+                Content = BuildOptionCard(title, description),
+                // 先赋值再挂事件：初始化时的选中不该被当成一次用户改动
+                IsChecked = string.Equals(value, current, StringComparison.Ordinal),
+            };
+            radio.Checked += (_, _) => ApplyCloseBehavior(value);
+            host.Children.Add(radio);
+        }
+
+        return host;
+    }
+
+    /// <summary>记下关闭窗口时的行为，下次关窗口按它执行。</summary>
+    private void ApplyCloseBehavior(string value)
+    {
+        _registry.Settings.CloseWindowAction = value;
+        _registry.Save();
+    }
+
+    /// <summary>勾选/取消右键菜单：写设置并立即同步注册表，小工具的菜单项会跟着刷新。</summary>
+    private void ApplyContextMenu(bool enabled)
+    {
+        _registry.Settings.AddToContextMenu = enabled;
+        _registry.Save();
+        ContextMenuRegistrar.Sync(_manager, _registry);
     }
 
     private void ApplyAutoStart(bool enabled, TextBlock tip)
@@ -547,14 +722,18 @@ public partial class SettingsCenterWindow : Window
         });
     }
 
-    private static TextBlock Hint(string text) => new()
+    private static TextBlock Hint(string text)
     {
-        Text = text,
-        Foreground = new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0xA6)),
-        FontSize = 11,
-        TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(22, 0, 0, 0),
-    };
+        var block = new TextBlock
+        {
+            Text = text,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(22, 0, 0, 0),
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, ThemeKeys.ResourceKey(ThemeKeys.TextMuted));
+        return block;
+    }
 
     private static FrameworkElement Labelled(string label, FrameworkElement editor)
     {
