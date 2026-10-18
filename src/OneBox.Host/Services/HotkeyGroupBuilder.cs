@@ -30,6 +30,27 @@ public sealed class HotkeyRow
     /// <summary>与之冲突的其他热键（用于在界面里点名"和谁撞了"）。</summary>
     public IReadOnlyList<HotkeyConflictPeer> ConflictWith { get; init; } = [];
 
+    /// <summary>
+    /// 插件的默认键（用户改过时与 <see cref="Combination"/> 不同）。
+    /// 没改过或插件未给出默认值时等于 <see cref="Combination"/>。
+    /// </summary>
+    public string DefaultCombination { get; init; } = "";
+
+    /// <summary>是否被用户改过键。</summary>
+    public bool IsCustomized { get; init; }
+
+    /// <summary>是否固定不可改（例如"修复键盘输入"这类救急键）。</summary>
+    public bool IsFixed { get; init; }
+
+    /// <summary>
+    /// 该热键注册失败是因为被其他软件占用（而非插件间撞车）。
+    /// 界面据此区分"改键才能解决"与"可能只是同时运行才冲突"。
+    /// </summary>
+    public bool OccupiedByOtherApp { get; init; }
+
+    /// <summary>所属插件 id（改键时用来定位）。</summary>
+    public string PluginId { get; init; } = "";
+
     /// <summary>是否存在需要高亮的冲突。</summary>
     public bool HasConflict => Conflict is not null;
 }
@@ -106,6 +127,12 @@ public static class HotkeyGroupBuilder
                     Error = h.Error,
                     Conflict = byCombination.Describe(source, h),
                     ConflictWith = byCombination.PeersOf(source, h),
+                    PluginId = source.PluginId,
+                    DefaultCombination = string.IsNullOrWhiteSpace(h.DefaultCombination) ? h.Combination : h.DefaultCombination,
+                    IsCustomized = !HotkeyParser.SameCombination(h.Combination, h.DefaultCombination)
+                                   && !string.IsNullOrWhiteSpace(h.DefaultCombination),
+                    IsFixed = h.Fixed,
+                    OccupiedByOtherApp = h.OccupiedByOtherApp,
                 })
                 .OrderBy(r => r.Combination, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(r => r.ActionId, StringComparer.OrdinalIgnoreCase)

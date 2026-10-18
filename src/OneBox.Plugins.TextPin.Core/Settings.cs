@@ -34,10 +34,15 @@ public sealed class Settings
     /// <summary>把当前剪贴板里的纯文本读入置顶窗的全局热键（一次性读取，不是监听）。</summary>
     public string PasteHotkey { get; set; } = "Ctrl+Alt+P";
 
-    /// <summary>把置顶文本复制回剪贴板的全局热键。</summary>
-    public string CopyHotkey { get; set; } = "Ctrl+Alt+C";
+    /// <summary>
+    /// 把置顶文本复制回剪贴板的全局热键。
+    ///
+    /// 与「抓取选中文字」互换：X 更贴近"抓取/剪切"的直觉（Ctrl+X），
+    /// C 更贴近"复制"（Ctrl+C），与系统里这两个习惯键的语义一致。
+    /// </summary>
+    public string CopyHotkey { get; set; } = "Ctrl+Alt+X";
 
-    /// <summary>抓取当前选中文字并置顶的全局热键（"Ctrl+Alt+X" 形式）。
+    /// <summary>抓取当前选中文字并置顶的全局热键（"Ctrl+Alt+C" 形式）。
     /// 在任意编辑器里选中文字后按下：模拟 Ctrl+C 复制，再把文本读进置顶窗。</summary>
-    public string CaptureHotkey { get; set; } = "Ctrl+Alt+X";
+    public string CaptureHotkey { get; set; } = "Ctrl+Alt+C";
 }

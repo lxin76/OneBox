@@ -63,6 +63,16 @@ public static class IpcTypes
     public const string MenuInvoked = "menuInvoked";
     /// <summary>用户在设置中心改动了本插件的设置，插件应据此更新并持久化。</summary>
     public const string SettingsChanged = "settingsChanged";
+    /// <summary>宿主切换了主题，插件应据此给自己的窗口换色。</summary>
+    public const string ThemeChanged = "themeChanged";
+    /// <summary>
+    /// 宿主重新注册了本插件的热键（含用户改键），随载荷下发实际生效的键位。
+    ///
+    /// 为什么需要这条消息：用户可以在箱宿主的热键页改键，改完之后插件自己的窗口、
+    /// 状态栏、提示文案里若还写着旧键位，就会与实际行为不一致。
+    /// 插件据此把展示用的键位跟着更新，而不必自己再存一份会失同步的副本。
+    /// </summary>
+    public const string HotkeysChanged = "hotkeysChanged";
     /// <summary>插件注册的菜单项需要刷新（插件可主动请求宿主重绘）。</summary>
     public const string TrayRefresh = "trayRefresh";
     /// <summary>宿主即将退出，插件应在限定时间内自行退出。</summary>

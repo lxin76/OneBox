@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OneBox.Abstractions.Theming;
 
 namespace OneBox.Host.Services;
 
@@ -64,6 +65,48 @@ public sealed class HostSettings
 
     /// <summary>工具箱窗口是否在启动时显示。</summary>
     public bool ShowToolboxOnStartup { get; set; }
+
+    /// <summary>
+    /// 是否把「OneBox 小工具」写进资源管理器的右键菜单（桌面与文件夹空白处）。
+    /// 打开后右键就能直接开工具箱、设置或某个小工具的窗口，不必先去找托盘图标。
+    /// </summary>
+    public bool AddToContextMenu { get; set; }
+
+    /// <summary>界面主题 id（见 <see cref="ThemeCatalog.All"/>）；未知值回退默认主题。</summary>
+    public string Theme { get; set; } = ThemeCatalog.DefaultId;
+
+    /// <summary>
+    /// 关闭窗口时的行为（取值见 <see cref="CloseWindowActions"/>）。
+    /// 为 null 表示还没问过用户：首次关闭窗口会弹一次快捷确认，结果记在这里，之后不再打扰。
+    /// </summary>
+    public string? CloseWindowAction { get; set; }
+
+    /// <summary>
+    /// 用户自定义的全局热键覆盖：键为 "&lt;插件id&gt;|&lt;动作id&gt;"，值为组合键文本。
+    /// 没改过的动作不在此表中，插件声明的默认键照常生效。
+    /// </summary>
+    public Dictionary<string, string>? HotkeyOverrides { get; set; }
+}
+
+/// <summary>关闭窗口时的行为取值。</summary>
+public static class CloseWindowActions
+{
+    /// <summary>只关窗口，OneBox 继续留在托盘（默认，也是没做过选择时的行为）。</summary>
+    public const string CloseWindowOnly = "closeWindowOnly";
+
+    /// <summary>关闭窗口的同时退出 OneBox。</summary>
+    public const string ExitApp = "exitApp";
+
+    /// <summary>
+    /// 把设置里的值解释成确定的取值：null（还没问过）或不认识的值一律按默认的"只关窗口"。
+    /// 用户手改配置文件、或旧版本残留了别的取值，都不该让窗口关不掉或意外退出。
+    /// </summary>
+    public static string Normalize(string? value)
+        => string.Equals(value?.Trim(), ExitApp, StringComparison.OrdinalIgnoreCase) ? ExitApp : CloseWindowOnly;
+
+    /// <summary>按设置，关闭窗口时是否要顺带退出宿主。</summary>
+    public static bool ShouldExit(string? value)
+        => string.Equals(Normalize(value), ExitApp, StringComparison.Ordinal);
 }
 
 /// <summary>插件注册表持久化（plugins.json + settings.json）。</summary>

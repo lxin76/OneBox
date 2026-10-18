@@ -56,22 +56,49 @@ public sealed class HotkeyService : IHotkeyRegistrar, IDisposable
         return null;
     }
 
-    /// <summary>探测组合键当前是否空闲（未被其他进程占用）。探测成功立即释放。</summary>
+    /// <summary>
+    /// 探测组合键当前是否空闲（未被其他进程占用）。探测后立即释放。
+    ///
+    /// 用的是消息专用窗口（HWND_MESSAGE）而不是 <c>GetConsoleWindow()</c>：
+    /// 宿主是 WinExe，根本没有控制台窗口，那个句柄恒为 0，
+    /// 旧实现于是每次都直接"当作可用"，外部冲突检测形同虚设。
+    ///
+    /// 注意：宿主自己已经注册的键也会让探测失败（ERROR_HOTKEY_ALREADY_REGISTERED），
+    /// 因此调用方必须先排除自身占用，否则会把"自己用的键"误报成"被别的软件占用"。
+    /// 每次探测都新建并销毁一个窗口，避免与宿主主窗口的注册 id 空间互相干扰。
+    /// </summary>
     public static bool ProbeAvailable(string combination)
     {
         if (HotkeyParser.Parse(combination) is not { } p) return false;
 
-        var hwnd = GetConsoleWindow();
-        if (hwnd == IntPtr.Zero) return true; // 无窗口时无法探测，按可用处理
+        var hwnd = CreateWindowEx(0, "STATIC", "OneBoxHotkeyProbe", 0, 0, 0, 0, 0,
+            HwndMessage, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+        if (hwnd == IntPtr.Zero) return true; // 建不出窗口就无法判断，不误报
 
         const int probeId = 0x0001;
-        if (RegisterHotKey(hwnd, probeId, p.Modifiers | HotkeyParser.MOD_NOREPEAT, p.Vk))
+        try
         {
-            UnregisterHotKey(hwnd, probeId);
-            return true;
+            if (RegisterHotKey(hwnd, probeId, p.Modifiers | HotkeyParser.MOD_NOREPEAT, p.Vk))
+            {
+                UnregisterHotKey(hwnd, probeId);
+                return true;
+            }
+
+            // 1409 = ERROR_HOTKEY_ALREADY_REGISTERED：被某个进程占着，才算"不可用"
+            // 其他错误（例如输入法把该组合整体拦下）不作为占用结论，按可用处理
+            return Marshal.GetLastWin32Error() != ErrorHotkeyAlreadyRegistered;
         }
-        return false;
+        finally
+        {
+            DestroyWindow(hwnd);
+        }
     }
+
+    /// <summary>ERROR_HOTKEY_ALREADY_REGISTERED：组合键已被某进程注册。</summary>
+    public const int ErrorHotkeyAlreadyRegistered = 1409;
+
+    /// <summary>消息专用窗口的父句柄，不会出现在屏幕与任务栏上。</summary>
+    private static readonly IntPtr HwndMessage = new(-3);
 
     private void EnsureHook()
     {
@@ -120,6 +147,12 @@ public sealed class HotkeyService : IHotkeyRegistrar, IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetConsoleWindow();
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateWindowEx(
+        uint dwExStyle, string lpClassName, string lpWindowName, uint dwStyle,
+        int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyWindow(IntPtr hWnd);
 }

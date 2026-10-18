@@ -22,6 +22,9 @@ public sealed class HotkeyRecorder : IDisposable
     /// <summary>捕获到按键（UI 线程回调）。key 为实际按键，modifiers 为当前修饰键状态。</summary>
     public event Action<Key, ModifierKeys>? KeyCaptured;
 
+    /// <summary>是否正在监听按键。界面据此避免在录制中刷新按钮文字，打断用户。 </summary>
+    public bool IsRecording => _hook != IntPtr.Zero;
+
     public HotkeyRecorder() => _proc = HookProc;
 
     /// <summary>开始监听。返回是否成功。</summary>

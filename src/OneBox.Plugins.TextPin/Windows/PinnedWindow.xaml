@@ -13,7 +13,7 @@
     <Window.Resources>
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#C9CDD8"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
@@ -27,10 +27,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#26FFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.OverlayHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#3DFFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.OverlayPressed}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -39,8 +39,8 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="RootBorder" CornerRadius="16" Background="#F21B1B2F"
-            BorderBrush="#40FFFFFF" BorderThickness="1">
+    <Border x:Name="RootBorder" CornerRadius="16" Background="{DynamicResource Theme.Floating}"
+            BorderBrush="{DynamicResource Theme.FloatingBorder}" BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -56,7 +56,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="&#x1F4CC;" FontSize="14" VerticalAlignment="Center" Margin="14,0,8,0"/>
-                <TextBlock Grid.Column="1" Text="置顶文本" Foreground="#F2F2F2" FontSize="13"
+                <TextBlock Grid.Column="1" Text="置顶文本" Foreground="{DynamicResource Theme.TextStrong}" FontSize="13"
                            FontWeight="SemiBold" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,8,0">
                     <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#x1F4CC;"
@@ -79,7 +79,7 @@
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
                      HorizontalScrollBarVisibility="Disabled"
-                     Background="#14000000" Foreground="#F2F2F2" CaretBrush="#F2F2F2"
+                     Background="{DynamicResource Theme.EditorBg}" Foreground="{DynamicResource Theme.TextInput}" CaretBrush="{DynamicResource Theme.TextInput}"
                      BorderThickness="0" Padding="8,6"
                      FontSize="13"
                      TextChanged="OnEditorTextChanged"
@@ -95,15 +95,15 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusText" Grid.Column="0" Foreground="#8A90A6" FontSize="11"
+                <TextBlock x:Name="StatusText" Grid.Column="0" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                <TextBlock x:Name="HintText" Grid.Column="1" Foreground="#6A7088" FontSize="11"
+                <TextBlock x:Name="HintText" Grid.Column="1" Foreground="{DynamicResource Theme.TextFaint}" FontSize="11"
                            VerticalAlignment="Center" Margin="8,0,8,0"/>
                 <Border x:Name="ResizeHandle" Grid.Column="2" Width="18" Height="18"
                         Background="Transparent" Cursor="SizeNWSE"
                         ToolTip="拖动调整窗口大小"
                         MouseLeftButtonDown="OnResizeStart">
-                    <Path Data="M 2,16 L 16,2 M 8,16 L 16,8" Stroke="#8A90A6" StrokeThickness="1.4"
+                    <Path Data="M 2,16 L 16,2 M 8,16 L 16,8" Stroke="{DynamicResource Theme.TextMuted}" StrokeThickness="1.4"
                           HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
                 </Border>
             </Grid>

@@ -64,6 +64,9 @@ public static class SingleInstance
             client.Connect(1500);
             using var writer = new StreamWriter(client, new UTF8Encoding(false)) { AutoFlush = true };
             writer.Write(request);
+
+            // 留痕：排障时"点了菜单没反应"要能分清是没走到这里，还是后面的环节断了
+            HostLog.Write($"已把请求转交给正在运行的实例：{request}");
         }
         catch (Exception ex)
         {

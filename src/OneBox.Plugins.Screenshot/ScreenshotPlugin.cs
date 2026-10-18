@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using OneBox.Abstractions;
 using OneBox.Plugin.Sdk;
+using OneBox.Plugin.Sdk.Wpf;
 using OneBox.Plugins.Screenshot.Core;
 using OneBox.Plugins.Screenshot.Services;
 using OneBox.Plugins.Screenshot.Windows;
@@ -60,6 +61,9 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     /// <summary>启动插件：载入设置、创建常驻窗口、向宿主声明热键与托盘菜单。</summary>
     public async Task StartAsync()
     {
+        // 跟随宿主主题：设置窗与识别结果窗引用主题键，这里把调色板刷进应用资源
+        PluginTheme.Attach(_context);
+
         AppPaths.Initialize(_context.DataDirectory);
         Settings = SettingsStore.Load();
 
@@ -69,6 +73,8 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         _context.HotkeyPressed += OnHotkeyPressed;
         _context.MenuInvoked += OnMenuInvoked;
         _context.SettingsChanged += OnSettingsChanged;
+        // 用户在工具箱改键后，宿主会推最新注册结果；状态栏与设置页的占用提示要跟着刷新
+        _context.HotkeysChanged += OnHotkeysChanged;
 
         // 先声明热键与菜单，宿主注册完成后回报结果
         await DeclareHotkeysAsync().ConfigureAwait(false);
@@ -78,6 +84,20 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         await _context.ReadyAsync("截图", BuildStatusText()).ConfigureAwait(false);
         await _context.LogInfoAsync($"截图插件已就绪（保存目录 {Settings.ResolveSaveDirectory()}）")
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 宿主重新注册了热键（用户改键或注册状态变化）。
+    ///
+    /// 更新 <see cref="HotkeyResults"/> 并刷新状态栏与设置页提示：
+    /// 否则用户在工具箱里改完键，截图插件仍显示"1 个热键被占用"这类过期信息。
+    /// </summary>
+    private void OnHotkeysChanged(IReadOnlyList<HotkeyRegistrationResult> results)
+    {
+        HotkeyResults = results;
+        _ = _context.SetStatusAsync(BuildStatusText());
+        ReportHotkeyFailures();
+        _settingsWindow?.RefreshHotkeys();
     }
 
     private string BuildStatusText()
@@ -91,7 +111,16 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
     // ---- 热键与菜单声明 ----
 
-    private Task DeclareHotkeysAsync() => _dispatcher.InvokeAsync(async () =>
+    /// <summary>
+    /// 向宿主声明热键，等待注册结果写回 <see cref="HotkeyResults"/>。
+    ///
+    /// 这里刻意用 async/await，而不是先前的
+    /// <c>_dispatcher.InvokeAsync(...).Task.Unwrap()</c>：对 InvokeAsync 返回的
+    /// DispatcherOperation 再取 <c>.Task</c> 会得到另一个 Task，
+    /// Unwrap 出来的与调用方 await 的不是同一个，异常被静默丢弃，
+    /// 启动阶段"这次没声明成功"就退化成"这个插件没有热键"，且不留任何日志。
+    /// </summary>
+    private async Task DeclareHotkeysAsync()
     {
         HotkeyResults = await _context.DeclareHotkeysAsync(
         [
@@ -122,7 +151,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         ]).ConfigureAwait(true);
 
         ReportHotkeyFailures();
-    }).Task.Unwrap();
+    }
 
     /// <summary>把注册失败的热键显示在设置窗口里（若开着）。</summary>
     private void ReportHotkeyFailures()
@@ -648,6 +677,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         {
             Owner = null,
         };
+        PluginTheme.ApplyToWindow(window);
         window.Show();
         window.Activate();
 
@@ -681,6 +711,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
             _settingsWindow = null;
         };
 
+        PluginTheme.ApplyToWindow(_settingsWindow);
         _settingsWindow.Show();
         ReportHotkeyFailures();
     }

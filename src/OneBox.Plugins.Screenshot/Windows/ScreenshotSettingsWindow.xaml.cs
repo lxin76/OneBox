@@ -294,6 +294,18 @@ public partial class ScreenshotSettingsWindow : Window
         OcrHotkeyButton.Content = _settings.OcrClipboardHotkey;
     }
 
+    /// <summary>
+    /// 宿主重新注册热键后刷新窗口上的键位标签。
+    ///
+    /// 用户在工具箱里改键时，本窗口可能一直开着；若不刷新，
+    /// 按钮上会继续显示旧组合，与宿主里实际生效的键对不上。
+    /// </summary>
+    public void RefreshHotkeys()
+    {
+        if (_recorder is { IsRecording: true }) return; // 正在录制时不打断
+        RestoreHotkeyLabels();
+    }
+
     /// <summary>宿主注册热键后回报的失败项，显示在窗口里。</summary>
     public void ShowHotkeyWarning(string message)
     {

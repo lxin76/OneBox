@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>OneBox.Plugin.Sdk.Wpf</RootNamespace>
+    <Description>OneBox 插件开发包（WPF 侧）：让插件窗口跟随宿主主题一起换色。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+  </ItemGroup>
+
+</Project>

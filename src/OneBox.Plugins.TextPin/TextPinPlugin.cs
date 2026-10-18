@@ -18,7 +18,8 @@ namespace OneBox.Plugins.TextPin;
 public sealed class TextPinPlugin : IAsyncDisposable
 {
     /// <summary>热键动作标识（与宿主转发回来的 actionId 对应）。</summary>
-    private const string HotkeyToggle = "toggle";
+    /// <summary>呼出热键的动作标识（窗口刷新提示文本时也要用）。</summary>
+    public const string HotkeyToggle = "toggle";
     private const string HotkeyPaste = "paste";
     private const string HotkeyCopy = "copy";
     private const string HotkeyCapture = "capture";
@@ -57,6 +58,21 @@ public sealed class TextPinPlugin : IAsyncDisposable
     public IReadOnlyList<HotkeyRegistrationResult> HotkeyResults { get; private set; } = [];
 
     /// <summary>
+    /// 某个动作当前**实际生效**的组合键。
+    ///
+    /// 优先取宿主回传的注册结果：用户可能在工具箱里改键，那时插件自己的
+    /// <see cref="Settings"/> 仍是声明时的值，拿它做界面提示会显示旧键位。
+    /// 只有宿主还没回报过结果时，才退回插件自己声明的默认键。
+    /// </summary>
+    public string EffectiveHotkey(string actionId, string fallback)
+    {
+        var result = HotkeyResults.FirstOrDefault(r =>
+            string.Equals(r.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
+
+        return result is { Combination.Length: > 0 } ? result.Combination : fallback;
+    }
+
+    /// <summary>
     /// 启动插件：恢复上次的文本、创建（但不显示）置顶窗，向宿主声明热键、菜单与设置项。
     /// 窗口只在用户按热键或点托盘菜单时才出现，启动时不打扰用户。
     /// </summary>
@@ -77,6 +93,8 @@ public sealed class TextPinPlugin : IAsyncDisposable
         _context.HotkeyPressed += OnHotkeyPressed;
         _context.MenuInvoked += OnMenuInvoked;
         _context.SettingsChanged += OnSettingsChanged;
+        // 用户在工具箱改键后，宿主会推最新注册结果；状态栏与设置页要跟着刷新
+        _context.HotkeysChanged += OnHotkeysChanged;
 
         // 启动时**不**显示窗口：插件只在后台待命，用户按呼出热键或点托盘菜单才唤出。
         // 但窗口对象仍必须在这里（任何 await 之前）建好：DeclareHotkeysAsync 等用
@@ -108,6 +126,25 @@ public sealed class TextPinPlugin : IAsyncDisposable
             // 关闭过程中的异常忽略
         }
         _window = null;
+    }
+
+    /// <summary>
+    /// 宿主重新注册了热键（用户改键或注册状态变化）。
+    ///
+    /// 这里做两件事：更新 <see cref="HotkeyResults"/> 让设置页的"未生效"提示保持准确，
+    /// 并刷新状态栏——否则用户在工具箱改完键，插件的状态文本还停在旧结果上。
+    /// </summary>
+    private void OnHotkeysChanged(IReadOnlyList<HotkeyRegistrationResult> results)
+    {
+        HotkeyResults = results;
+        _ = _context.SetStatusAsync(BuildStatusText());
+
+        // 已打开的窗口要立刻显示新键位，否则用户改完键看到的还是旧提示
+        _window?.UpdateHintText();
+        _window?.RefreshSettingsHotkeys();
+
+        foreach (var failure in results.Where(r => !r.Registered))
+            WriteLog($"热键 {failure.Combination} 未生效：{failure.Error}");
     }
 
     /// <summary>把当前设置里的热键声明给宿主，由宿主统一注册并处理冲突。</summary>

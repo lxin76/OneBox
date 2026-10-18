@@ -24,6 +24,16 @@ public sealed class InverseBoolConverter : IValueConverter
         => value is not true;
 }
 
+/// <summary>固定热键（不可改）时给出说明性提示，否则不提示。</summary>
+public sealed class FixedHotkeyTooltipConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? "该热键是内置的救急快捷键，不允许修改" : "";
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>非空字符串 → Visibility。</summary>
 public sealed class NonEmptyToVisibilityConverter : IValueConverter
 {

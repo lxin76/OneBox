@@ -277,6 +277,25 @@ public partial class SettingsWindow : Window
         return HotkeyConflictChecker.FindSelfConflict(combo, others);
     }
 
+    /// <summary>
+    /// 宿主重新注册了热键后，刷新窗口里显示的键位与"未生效"提示。
+    ///
+    /// 窗口可能一直开着；用户这时在工具箱里改了键，若这里不刷新，
+    /// 窗口会继续显示旧键位和过期的失败提示，与实际行为对不上。
+    /// </summary>
+    public void RefreshHotkeys()
+    {
+        // 正在录制时不打扰：用户此刻正在按组合键，改动按钮文字反而添乱
+        if (_recorder is { IsRecording: true }) return;
+
+        ToggleHotkeyButton.Content = _plugin.Settings.ToggleHotkey;
+        PasteHotkeyButton.Content = _plugin.Settings.PasteHotkey;
+        CopyHotkeyButton.Content = _plugin.Settings.CopyHotkey;
+        CaptureHotkeyButton.Content = _plugin.Settings.CaptureHotkey;
+
+        ShowHotkeyWarning(BuildHotkeyWarning());
+    }
+
     private void ShowHotkeyWarning(string? message)
     {
         if (string.IsNullOrEmpty(message))

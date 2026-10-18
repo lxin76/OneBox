@@ -29,8 +29,8 @@ public class SettingsStoreTests
         Assert.Equal(200_000, settings.MaxTextLength);
         Assert.Equal("Ctrl+Alt+V", settings.ToggleHotkey);
         Assert.Equal("Ctrl+Alt+P", settings.PasteHotkey);
-        Assert.Equal("Ctrl+Alt+C", settings.CopyHotkey);
-        Assert.Equal("Ctrl+Alt+X", settings.CaptureHotkey);
+        Assert.Equal("Ctrl+Alt+X", settings.CopyHotkey);
+        Assert.Equal("Ctrl+Alt+C", settings.CaptureHotkey);
     }
 
     [Fact]

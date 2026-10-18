@@ -5,12 +5,12 @@
         Icon="pack://application:,,,/Assets/app.ico"
         Width="520" Height="420" MinWidth="360" MinHeight="240"
         WindowStartupLocation="CenterScreen"
-        Background="#1B1B2F" Foreground="#E6E8F0" FontSize="12">
+        Background="{DynamicResource Theme.Surface}" Foreground="{DynamicResource Theme.Text}" FontSize="12">
     <Window.Resources>
         <Style TargetType="Button">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#E6E8F0"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.ButtonBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -25,10 +25,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonPressed}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -37,10 +37,10 @@
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#24243C"/>
-            <Setter Property="Foreground" Value="#F2F2F2"/>
-            <Setter Property="CaretBrush" Value="#F2F2F2"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.InputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
     </Window.Resources>
@@ -54,12 +54,12 @@
             <Button x:Name="CopyLinesButton" DockPanel.Dock="Right" Content="复制为单行"
                     Margin="0,0,8,0" ToolTip="把换行替换为空格，便于粘贴到单行输入框"
                     Click="OnCopySingleLineClick"/>
-            <TextBlock x:Name="HeaderText" VerticalAlignment="Center" Foreground="#8A90A6"
+            <TextBlock x:Name="HeaderText" VerticalAlignment="Center" Foreground="{DynamicResource Theme.TextMuted}"
                        Text="识别结果"/>
         </DockPanel>
 
         <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="0,6,0,0"
-                   Foreground="#8A90A6" FontSize="11" TextWrapping="Wrap"/>
+                   Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" TextWrapping="Wrap"/>
 
         <TextBox x:Name="ResultBox" AcceptsReturn="True" AcceptsTab="True"
                  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"

@@ -3,6 +3,7 @@
     <Project Path="src/OneBox.Abstractions/OneBox.Abstractions.csproj" />
     <Project Path="src/OneBox.Host/OneBox.Host.csproj" />
     <Project Path="src/OneBox.Plugin.Sdk/OneBox.Plugin.Sdk.csproj" />
+    <Project Path="src/OneBox.Plugin.Sdk.Wpf/OneBox.Plugin.Sdk.Wpf.csproj" />
   </Folder>
   <Folder Name="/plugins/">
     <Project Path="src/OneBox.Plugins.TextPin/OneBox.Plugins.TextPin.csproj" />

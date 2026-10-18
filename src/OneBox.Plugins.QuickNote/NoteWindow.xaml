@@ -4,7 +4,7 @@
         Title="快速便签" Width="380" Height="300"
         Icon="pack://application:,,,/Assets/app.ico"
         WindowStartupLocation="CenterScreen" Topmost="True"
-        Background="#1E1E36" Foreground="#E6E8F0" FontSize="13">
+        Background="{DynamicResource Theme.Card}" Foreground="{DynamicResource Theme.Text}" FontSize="13">
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -14,11 +14,12 @@
         <TextBox x:Name="NoteBox" Grid.Row="0"
                  AcceptsReturn="True" TextWrapping="Wrap"
                  VerticalScrollBarVisibility="Auto"
-                 Background="#16162A" Foreground="#F2F2F2" CaretBrush="#F2F2F2"
-                 BorderBrush="#2E2E48" BorderThickness="1" Padding="8"
+                 Background="{DynamicResource Theme.Window}" Foreground="{DynamicResource Theme.TextInput}" CaretBrush="{DynamicResource Theme.TextInput}"
+                 BorderBrush="{DynamicResource Theme.Line}" BorderThickness="1" Padding="8"
                  TextChanged="OnNoteTextChanged"/>
 
-        <TextBlock Grid.Row="1" Margin="0,8,0,0" FontSize="11" Foreground="#8A90A6"
-                   Text="内容自动保存。按 Ctrl+Alt+N 或托盘菜单可隐藏本窗口。"/>
+        <!-- 键位由插件按实际生效的热键填入，不能写死：用户可以在工具箱里改键 -->
+        <TextBlock x:Name="HintText" Grid.Row="1" Margin="0,8,0,0" FontSize="11"
+                   Foreground="{DynamicResource Theme.TextMuted}"/>
     </Grid>
 </Window>

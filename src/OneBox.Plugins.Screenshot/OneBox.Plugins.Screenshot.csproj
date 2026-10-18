@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
     <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk.Wpf\OneBox.Plugin.Sdk.Wpf.csproj" />
     <ProjectReference Include="..\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
   </ItemGroup>
 

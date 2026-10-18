@@ -79,7 +79,7 @@ public class ScreenshotSettingsTests
 
             var loaded = SettingsStore.Load(path);
             Assert.True(loaded.CopyToClipboard);
-            Assert.Equal("Ctrl+Alt+A", loaded.RegionHotkey);
+            Assert.Equal("Ctrl+F1", loaded.RegionHotkey);
         }
         finally
         {

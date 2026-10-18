@@ -18,6 +18,12 @@ public partial class ToolboxWindow : Window
     /// <summary>热键页当前的分组（整体重建，数量很小）。</summary>
     private List<HotkeyGroupViewModel> _hotkeyGroups = [];
 
+    /// <summary>改键录制器：同一时刻只应有一行在录制。</summary>
+    private readonly HotkeyRecorderService _hotkeyRecorder = new();
+
+    /// <summary>正在录制的那一行（切换行或取消时用来复位）。</summary>
+    private HotkeyRowViewModel? _recordingRow;
+
     /// <summary>
     /// 窗口句柄就绪后，把系统标题栏切成与当前主题一致的明暗。
     /// 不接管窗口框架：拖动、最大化、贴边分屏仍由系统负责。
@@ -59,6 +65,10 @@ public partial class ToolboxWindow : Window
             _manager.StatusChanged -= OnPluginStatusChanged;
             _manager.MenuChanged -= Rebuild;
             ThemeManager.Changed -= OnThemeChanged;
+
+            // 窗口关掉时必须卸掉键盘钩子，否则钩子会一直挂着、占住输入
+            CancelRecording();
+            _hotkeyRecorder.Dispose();
         };
     }
 
@@ -71,6 +81,9 @@ public partial class ToolboxWindow : Window
     /// <summary>从管理器状态重建列表（数量很小，整体重建最不易出错）。</summary>
     public void Rebuild()
     {
+        // 重建会换掉全部热键行；正在录制的行随之消失，必须先停掉钩子
+        CancelRecording();
+
         // 保留用户当前选中的插件，重建后尽量还原
         var selectedId = (PluginList.SelectedItem as PluginItemViewModel)?.Id;
 
@@ -209,6 +222,180 @@ public partial class ToolboxWindow : Window
     private void SetAllHotkeyGroupsExpanded(bool expanded)
     {
         foreach (var group in _hotkeyGroups) group.IsExpanded = expanded;
+    }
+
+    // ---- 自定义热键 ----
+
+    /// <summary>
+    /// 点「改键」：开始录制这一行。再点一次同一行则取消。
+    ///
+    /// 录制用低级键盘钩子而不是窗口按键事件：已被其他软件占用的组合键
+    /// 会被系统直接吞掉、送不到窗口，而那恰恰是用户最该看到提示的情形。
+    /// </summary>
+    private void OnRecordHotkeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: HotkeyRowViewModel row }) return;
+
+        // 同一行再点一次（此时按钮显示为「取消」）= 取消录制
+        if (ReferenceEquals(_recordingRow, row))
+        {
+            CancelRecording();
+            return;
+        }
+
+        CancelRecording();
+
+        // 先把全局热键停掉，再开始录制：顺序反过来会有一个窗口期，
+        // 用户在这期间按下的键仍可能触发插件功能
+        _manager.SuspendHotkeys();
+
+        _recordingRow = row;
+        row.EditMessage = null;
+        row.IsRecording = true;
+
+        _hotkeyRecorder.Captured -= OnHotkeyCaptured;
+        _hotkeyRecorder.Cancelled -= OnRecordingCancelled;
+        _hotkeyRecorder.Captured += OnHotkeyCaptured;
+        _hotkeyRecorder.Cancelled += OnRecordingCancelled;
+
+        if (!_hotkeyRecorder.Start())
+        {
+            CancelRecording();
+            row.EditMessageIsError = true;
+            row.EditMessage = "无法启动按键录制，请重试";
+        }
+    }
+
+    private void OnRecordingCancelled() => CancelRecording();
+
+    /// <summary>复位录制状态（取消、捕获完成或窗口关闭时调用）。</summary>
+    private void CancelRecording()
+    {
+        _hotkeyRecorder.Stop();
+        _hotkeyRecorder.Captured -= OnHotkeyCaptured;
+        _hotkeyRecorder.Cancelled -= OnRecordingCancelled;
+
+        if (_recordingRow is not null)
+        {
+            _recordingRow.IsRecording = false;
+            _recordingRow = null;
+        }
+
+        // 无论成功、取消还是异常退出，都必须把热键恢复回去，
+        // 否则用户会发现"改了一次键之后所有快捷键都失灵了"
+        _manager.ResumeHotkeys();
+    }
+
+    /// <summary>
+    /// 捕获到组合键：校验后保存并重新注册。
+    ///
+    /// 两类冲突的处置刻意不同：
+    /// · 平台内部重复 —— 必定保存不了，先改掉才能用，直接拒绝并说明和谁撞了；
+    /// · 被其他软件占用 —— **只强提示、不阻止**。两个软件未必同时运行，
+    ///   错开使用就没事，用户比探测更清楚自己的用法。
+    /// </summary>
+    private void OnHotkeyCaptured(string combination)
+    {
+        var row = _recordingRow;
+        CancelRecording();
+        if (row is null) return;
+
+        var check = _manager.CheckHotkeyChange(row.PluginId, row.ActionId, combination);
+
+        if (!check.CanApply)
+        {
+            // 拒绝原因既写在行内，也落到窗口底部：行内提示在长列表里容易被滚出视野，
+            // 用户按下键后看到的只有"录制结束、什么也没发生"，就会以为功能失灵
+            row.EditMessageIsError = true;
+            row.EditMessage = check.Error;
+            FooterHint.Text = $"未保存：{check.Error}";
+            return;
+        }
+
+        var error = _manager.SetHotkey(row.PluginId, row.ActionId, combination);
+        if (error is not null)
+        {
+            row.EditMessageIsError = true;
+            row.EditMessage = error;
+            FooterHint.Text = $"未保存：{error}";
+            return;
+        }
+
+        FooterHint.Text = $"已设置 {combination}";
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            Rebuild();
+
+            // 外部冲突时，重建后仍要把醒目提示留在这一行上：
+            // 否则用户只看到"已保存"，下次与那个软件同时运行时会一头雾水
+            if (check.HasExternalConflict)
+                ShowExternalNotice(row.PluginId, row.ActionId, $"已保存，但{check.ExternalConflictMessage}");
+            else
+                ShowSavedHint(row.PluginId, row.ActionId, $"已保存：{combination}");
+        });
+    }
+
+    /// <summary>
+    /// 「检查与其他软件冲突」：逐个试探当前热键是否已被别的进程注册。
+    ///
+    /// 只提示、不改任何设置：被占用往往只是"同时运行才冲突"，
+    /// 用户需要的是知情，而不是被程序替他改键。
+    /// </summary>
+    private void OnCheckExternalConflicts(object sender, RoutedEventArgs e)
+    {
+        CancelRecording();
+
+        var occupied = _manager.FindExternalConflicts();
+        var rows = _hotkeyGroups.SelectMany(g => g.AllItems).ToList();
+
+        foreach (var row in rows)
+            row.ExternalNotice = occupied.TryGetValue(row.Combination, out var message) ? message : null;
+
+        var count = rows.Count(r => r.HasExternalNotice);
+        FooterHint.Text = count == 0
+            ? "检查完成：当前热键没有与其他软件冲突。"
+            : $"检查完成：{count} 个热键与其他软件冲突（仅提示，不影响使用；若与该软件不同时运行则无妨）。";
+    }
+
+    /// <summary>在指定行上写外部冲突的醒目提示。</summary>
+    private void ShowExternalNotice(string pluginId, string actionId, string message)
+    {
+        var target = FindRow(pluginId, actionId);
+        if (target is not null) target.ExternalNotice = message;
+    }
+
+    /// <summary>按插件与动作定位当前界面上的热键行（重建会换掉视图模型）。</summary>
+    private HotkeyRowViewModel? FindRow(string pluginId, string actionId)
+        => _hotkeyGroups
+            .SelectMany(g => g.AllItems)
+            .FirstOrDefault(i =>
+                string.Equals(i.PluginId, pluginId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(i.ActionId, actionId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>点「恢复默认」：删掉覆盖项并重新注册。</summary>
+    private void OnResetHotkeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: HotkeyRowViewModel row }) return;
+
+        CancelRecording();
+        _manager.ResetHotkey(row.PluginId, row.ActionId);
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            Rebuild();
+            ShowSavedHint(row.PluginId, row.ActionId, $"已恢复默认：{row.DefaultCombination}");
+        });
+    }
+
+    /// <summary>重建后在对应行上写一条成功提示（重建会换掉视图模型，所以按 id 重新定位）。</summary>
+    private void ShowSavedHint(string pluginId, string actionId, string message)
+    {
+        var row = FindRow(pluginId, actionId);
+        if (row is null) return;
+
+        row.EditMessageIsError = false;
+        row.EditMessage = message;
     }
 
     // ---- 插件操作 ----

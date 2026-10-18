@@ -1,3 +1,5 @@
+using OneBox.Abstractions.Theming;
+
 namespace OneBox.Abstractions;
 
 /// <summary>握手载荷（宿主 → 插件）。</summary>
@@ -10,6 +12,18 @@ public sealed class HelloPayload
     public string DataDirectory { get; set; } = "";
     /// <summary>宿主日志目录。</summary>
     public string LogDirectory { get; set; } = "";
+    /// <summary>
+    /// 宿主当前的主题调色板。插件用它在自己的进程里给窗口上色——
+    /// 主题色随握手一起下发，插件不必内置一份可能与宿主不一致的主题目录。
+    /// </summary>
+    public ThemePalette? Theme { get; set; }
+}
+
+/// <summary>主题变更通知（宿主 → 插件）：宿主换了主题，插件应立刻给窗口换色。</summary>
+public sealed class ThemeChangedPayload
+{
+    /// <summary>新的主题调色板（完整色表，直接覆盖插件当前使用的那一份）。</summary>
+    public ThemePalette Theme { get; set; } = new();
 }
 
 /// <summary>插件就绪载荷（插件 → 宿主）。</summary>
@@ -55,6 +69,16 @@ public sealed class DeclareHotkeysPayload
 public sealed class HotkeyPressedPayload
 {
     public string ActionId { get; set; } = "";
+}
+
+/// <summary>
+/// 热键注册结果变更通知（宿主 → 插件）。
+/// 用户改键、或注册结果因冲突发生变化时下发，让插件的提示文案与实际生效的键位保持一致。
+/// </summary>
+public sealed class HotkeysChangedPayload
+{
+    /// <summary>本插件全部热键的最新注册结果。</summary>
+    public List<HotkeyRegistrationResult> Results { get; set; } = [];
 }
 
 /// <summary>托盘/工具箱菜单声明载荷（插件 → 宿主）。</summary>

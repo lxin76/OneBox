@@ -5,18 +5,18 @@
         Icon="pack://application:,,,/Assets/app.ico"
         Width="520" SizeToContent="Height" MaxHeight="720"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize" ShowInTaskbar="True"
-        Background="#1B1B2F" Foreground="#E6E8F0" FontSize="12">
+        Background="{DynamicResource Theme.Surface}" Foreground="{DynamicResource Theme.Text}" FontSize="12">
     <Window.Resources>
         <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
             <Setter Property="Margin" Value="0,3,0,6"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
         <Style TargetType="Button">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#E6E8F0"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.ButtonBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Text}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,5"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -31,10 +31,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#3A3A58"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#24243C"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.ButtonPressed}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -43,10 +43,10 @@
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#2E2E48"/>
-            <Setter Property="Foreground" Value="#F2F2F2"/>
-            <Setter Property="CaretBrush" Value="#F2F2F2"/>
-            <Setter Property="BorderBrush" Value="#3A3A58"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.InputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Theme.TextInput}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="5,3"/>
         </Style>
@@ -58,12 +58,12 @@
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#F2F2F2"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextStrong}"/>
             <Setter Property="Margin" Value="0,16,0,8"/>
         </Style>
 
         <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#8A90A6"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextMuted}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
@@ -73,7 +73,7 @@
         <StackPanel Margin="22,18,22,18">
             <TextBlock Text="截图" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
 
-            <TextBlock Text="保存目录：" Foreground="#E6E8F0" Margin="0,2,0,3"/>
+            <TextBlock Text="保存目录：" Foreground="{DynamicResource Theme.Text}" Margin="0,2,0,3"/>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -116,7 +116,7 @@
                             TickFrequency="1" IsSnapToTickEnabled="True"
                             VerticalAlignment="Center"/>
                     <TextBlock x:Name="QualityText" VerticalAlignment="Center" Margin="8,0,0,0"
-                               Foreground="#B9BFD0"/>
+                               Foreground="{DynamicResource Theme.TextMuted}"/>
                 </StackPanel>
             </Grid>
 
@@ -207,7 +207,7 @@
                 <Button x:Name="OcrHotkeyButton" Grid.Column="1" Width="180"
                         HorizontalAlignment="Left" Click="OnRecordOcrHotkey"/>
             </Grid>
-            <TextBlock x:Name="HotkeyWarningText" Foreground="#FFB454" FontSize="11"
+            <TextBlock x:Name="HotkeyWarningText" Foreground="{DynamicResource Theme.Warn}" FontSize="11"
                        TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
             <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
                        Text="点击热键按钮后按下新组合键（需含 Ctrl/Alt/Shift/Win 之一），Esc 取消。"/>
@@ -217,7 +217,7 @@
             <StackPanel Orientation="Horizontal">
                 <Button Content="打开数据目录" Click="OnOpenDataDir" Margin="0,0,8,0"/>
                 <Button Content="打开截图目录" Click="OnOpenShotsDir" Margin="0,0,8,0"/>
-                <Button Content="恢复默认设置" Click="OnResetSettings" Foreground="#FFB454"/>
+                <Button Content="恢复默认设置" Click="OnResetSettings" Foreground="{DynamicResource Theme.Warn}"/>
             </StackPanel>
 
             <TextBlock Text="设置修改后自动保存。" Style="{StaticResource Hint}" Margin="0,14,0,0"/>

@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Text.Json;
 using System.Windows.Threading;
 using OneBox.Abstractions;
+using OneBox.Abstractions.Theming;
 
 namespace OneBox.Host.Services;
 
@@ -31,8 +32,30 @@ public sealed class PluginHotkeyBinding
     public string ActionId { get; init; } = "";
     public string Combination { get; init; } = "";
     public string Description { get; init; } = "";
+
+    /// <summary>
+    /// 插件声明的默认键。用户改过键时与 <see cref="Combination"/> 不同，
+    /// 界面据此提供"恢复默认"并标出该项已被自定义。
+    /// </summary>
+    public string DefaultCombination { get; init; } = "";
+
+    /// <summary>是否固定不可改（改键界面里置灰）。</summary>
+    public bool Fixed { get; init; }
+
     public bool Registered { get; init; }
     public string? Error { get; init; }
+
+    /// <summary>
+    /// 注册失败是否因为该组合键已被**其他软件**占用（而非插件之间撞车）。
+    /// 界面据此给出"与其他软件冲突"的显眼提示：这类冲突只是同时运行时才有问题，
+    /// 常常不需要改键，用户需要知道该不该处理。
+    /// </summary>
+    public bool OccupiedByOtherApp { get; init; }
+
+    /// <summary>当前生效的组合键是否来自用户自定义（而非插件默认）。</summary>
+    public bool IsCustomized =>
+        !string.IsNullOrWhiteSpace(DefaultCombination)
+        && !HotkeyParser.SameCombination(Combination, DefaultCombination);
 }
 
 /// <summary>插件托盘/工具箱菜单项（宿主持有的副本）。</summary>
@@ -57,7 +80,10 @@ public sealed class PluginRuntime : IAsyncDisposable
     private Process? _process;
     private IpcConnection? _connection;
     private CancellationTokenSource? _lifetimeCts;
-    /// <summary>插件声明的热键（含用户覆盖后的组合串），由热键管理器读取。</summary>
+    /// <summary>
+    /// 插件声明的热键（原始组合串），由热键管理器读取。
+    /// 用户改键的覆盖不在这里生效：覆盖层归宿主所有，注册时才叠加（见 PluginManager.EffectiveHotkeys）。
+    /// </summary>
     private readonly List<HotkeyDeclaration> _declaredHotkeys = [];
     /// <summary>热键管理器回填的实际注册结果。</summary>
     private readonly List<PluginHotkeyBinding> _hotkeys = [];
@@ -223,6 +249,8 @@ public sealed class PluginRuntime : IAsyncDisposable
                 HostVersion = _hostVersion,
                 DataDirectory = HostPaths.PluginDataDirectory(_manifest.Id),
                 LogDirectory = HostPaths.LogDirectory,
+                // 主题随握手一起给：插件一启动就能用正确的配色创建窗口，不必等一次额外往返
+                Theme = ThemeManager.Current,
             })).ConfigureAwait(false);
 
             connection.MessageReceived += envelope => OnMessage(envelope);
@@ -385,15 +413,34 @@ public sealed class PluginRuntime : IAsyncDisposable
         if (envelope.RequestId is { Length: > 0 } requestId)
             lock (_pendingHotkeySync) _pendingHotkeyRequests.Add(requestId);
 
-        // 通知热键管理器重新注册（结果经 UpdateHotkeyRegistration 回填并应答）
+        // 通知热键管理器重新注册（结果经 UpdateHotkeyRegistration 回填并应答）。
+        // 这里只做热键重建，不走 MenuChanged：菜单与热键是两套数据，
+        // 挂上菜单重建会让每次声明都顺带重建一遍工具栏与热键页，纯属白费。
         _dispatcher.BeginInvoke(() => HotkeysChanged?.Invoke(this));
     }
 
     /// <summary>由热键管理器回填注册结果（不触发 HotkeysChanged，避免重入）。</summary>
     internal void UpdateHotkeyRegistration(IReadOnlyList<PluginHotkeyBinding> bindings)
     {
+        // 记下变更前的键位，用来判断"这次重建到底有没有让插件看到的东西变化"
+        var before = _hotkeys
+            .Select(b => $"{b.ActionId}|{b.Combination}|{b.Registered}")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+
         _hotkeys.Clear();
         _hotkeys.AddRange(bindings);
+
+        // 键位或生效状态变了就通知插件，让它窗口里的提示文案跟着更新。
+        // 插件重启后第一次注册也会走到这里，此时 before 为空，同样会下发一次，
+        // 插件无需额外处理"首次"这种特例。
+        var after = _hotkeys
+            .Select(b => $"{b.ActionId}|{b.Combination}|{b.Registered}")
+            .OrderBy(s => s, StringComparer.Ordinal)
+            .ToList();
+
+        if (!before.SequenceEqual(after, StringComparer.Ordinal))
+            _ = SendHotkeysChangedAsync();
 
         // 回填后才有结果可答，此时才回应插件先前发出的全部声明请求
         List<string> waiting;
@@ -458,6 +505,26 @@ public sealed class PluginRuntime : IAsyncDisposable
         if (_connection is null || changes.Count == 0) return Task.CompletedTask;
         return _connection.SendAsync(
             IpcEnvelope.Create(IpcTypes.SettingsChanged, new SettingsChangedPayload { Changes = [.. changes] }));
+    }
+
+    /// <summary>
+    /// 通知插件主题已切换（宿主设置中心里换了主题）。
+    /// 插件用新调色板立刻给自己的窗口换色；连接已断时静默丢弃。
+    /// </summary>
+    public Task SendThemeAsync(ThemePalette theme)
+    {
+        if (_connection is null) return Task.CompletedTask;
+
+        try
+        {
+            return _connection.SendAsync(
+                IpcEnvelope.Create(IpcTypes.ThemeChanged, new ThemeChangedPayload { Theme = theme }));
+        }
+        catch (Exception ex)
+        {
+            HostLog.Write($"下发主题到 {_manifest.Id} 失败: {ex.Message}");
+            return Task.CompletedTask;
+        }
     }
 
     private void HandleGetSetting(IpcEnvelope envelope)
@@ -673,6 +740,33 @@ public sealed class PluginRuntime : IAsyncDisposable
             _restartAttempts = 0;
             _ = _dispatcher.BeginInvoke(new Action(Start));
         });
+    }
+
+    /// <summary>把最新的热键注册结果推给插件（用户改键后提示文案要跟着变）。</summary>
+    private async Task SendHotkeysChangedAsync()
+    {
+        var connection = _connection;
+        if (connection is null) return;
+
+        var payload = new HotkeysChangedPayload
+        {
+            Results = [.. _hotkeys.Select(b => new HotkeyRegistrationResult
+            {
+                ActionId = b.ActionId,
+                Combination = b.Combination,
+                Registered = b.Registered,
+                Error = b.Error,
+            })],
+        };
+
+        try
+        {
+            await connection.SendAsync(IpcEnvelope.Create(IpcTypes.HotkeysChanged, payload)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            HostLog.Write($"向 {_manifest.Id} 推送热键变更失败: {ex.Message}");
+        }
     }
 
     /// <summary>把宿主收到的热键按下事件转发给插件。</summary>

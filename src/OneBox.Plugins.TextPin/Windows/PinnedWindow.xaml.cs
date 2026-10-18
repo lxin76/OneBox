@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using OneBox.Plugin.Sdk.Wpf;
 using OneBox.Plugins.TextPin.Core;
 using OneBox.Plugins.TextPin.Services;
 
@@ -166,7 +167,7 @@ public partial class PinnedWindow : Window
 
     /// <summary>热键文本变化后刷新提示（设置页修改热键后调用）。</summary>
     public void UpdateHintText()
-        => HintText.Text = $"{_plugin.Settings.ToggleHotkey} 显示/隐藏";
+        => HintText.Text = $"{_plugin.EffectiveHotkey(TextPinPlugin.HotkeyToggle, _plugin.Settings.ToggleHotkey)} 显示/隐藏";
 
     // ---- 置顶与不抢焦点 ----
 
@@ -362,8 +363,12 @@ public partial class PinnedWindow : Window
             return;
         }
         _settingsWindow = new SettingsWindow(_plugin, this);
+        PluginTheme.ApplyToWindow(_settingsWindow);
         _settingsWindow.Show();
     }
+
+    /// <summary>宿主改键后，让已打开的设置窗口也刷新键位显示与"未生效"提示。</summary>
+    public void RefreshSettingsHotkeys() => _settingsWindow?.RefreshHotkeys();
 
     /// <summary>设置窗口改了热键后刷新提示与宿主注册结果。</summary>
     public void OnSettingsChanged()

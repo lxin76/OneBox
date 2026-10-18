@@ -54,14 +54,20 @@ public sealed class ScreenshotSettings
     /// <summary>文字偏小时是否放大后重识别，用来提高小字识别率。</summary>
     public bool OcrEnhanceImage { get; set; } = true;
 
-    /// <summary>区域截图热键（"Ctrl+Alt+A" 形式）。</summary>
-    public string RegionHotkey { get; set; } = "Ctrl+Alt+A";
+    /// <summary>
+    /// 区域截图热键（"Ctrl+F1" 形式）。
+    ///
+    /// 默认改用 F1-F3：Ctrl+Alt+字母 这套组合与微信、钉钉等常用软件的全局热键重叠严重，
+    /// 而且字母键容易和用户在其他软件里的快捷键撞车。F1-F3 目前几乎没有软件占用，
+    /// 且三个截图动作连在一起，记起来也顺。
+    /// </summary>
+    public string RegionHotkey { get; set; } = "Ctrl+F1";
 
     /// <summary>全屏截图热键。</summary>
-    public string FullScreenHotkey { get; set; } = "Ctrl+Alt+F";
+    public string FullScreenHotkey { get; set; } = "Ctrl+F2";
 
     /// <summary>滚动截长图热键。</summary>
-    public string ScrollHotkey { get; set; } = "Ctrl+Alt+S";
+    public string ScrollHotkey { get; set; } = "Ctrl+F3";
 
     /// <summary>识别剪贴板图片里的文字的热键。</summary>
     public string OcrClipboardHotkey { get; set; } = "Ctrl+Alt+T";

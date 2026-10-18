@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OneBox.Abstractions;
+using OneBox.Abstractions.Theming;
 
 namespace OneBox.Plugin.Sdk;
 
@@ -21,6 +22,7 @@ public sealed class PluginContext : IAsyncDisposable
         HostVersion = hello.HostVersion;
         DataDirectory = hello.DataDirectory;
         LogDirectory = hello.LogDirectory;
+        CurrentTheme = hello.Theme ?? ThemeCatalog.Default;
         _connection.MessageReceived += OnMessage;
     }
 
@@ -46,6 +48,12 @@ public sealed class PluginContext : IAsyncDisposable
     /// <summary>宿主日志目录。</summary>
     public string LogDirectory { get; }
 
+    /// <summary>
+    /// 宿主当前的主题调色板。随握手下发，之后由 <see cref="ThemeChanged"/> 更新。
+    /// 插件据此给自己的窗口上色（配合 OneBox.Plugin.Sdk.Wpf 的 PluginTheme 可自动跟随）。
+    /// </summary>
+    public ThemePalette CurrentTheme { get; private set; }
+
     /// <summary>宿主通知插件停止工作（准备退出）。</summary>
     public CancellationToken Stopping => _stoppingCts.Token;
 
@@ -62,6 +70,21 @@ public sealed class PluginContext : IAsyncDisposable
     /// 插件应把新值应用到内存并自行持久化（插件是设置值的唯一来源）。
     /// </summary>
     public event Action<SettingsChangedPayload>? SettingsChanged;
+
+    /// <summary>
+    /// 宿主切换了主题（用户在设置中心改的）。插件应据此立刻给已打开的窗口换色，
+    /// 参数就是新的完整调色板——直接覆盖上一次的即可，不需要自己维护主题目录。
+    /// </summary>
+    public event Action<ThemePalette>? ThemeChanged;
+
+    /// <summary>
+    /// 宿主重新注册了本插件的热键（用户改键、或注册结果发生变化）。
+    ///
+    /// 插件应当据此更新所有"给用户看的键位文案"（窗口提示、状态栏、托盘菜单说明等），
+    /// 否则用户改完键会发现界面里还写着旧键位，与实际行为对不上。
+    /// 参数是本插件全部热键的最新结果，按 ActionId 即可取到自己关心的那一项。
+    /// </summary>
+    public event Action<IReadOnlyList<HotkeyRegistrationResult>>? HotkeysChanged;
 
     /// <summary>与宿主的连接关闭（宿主退出或崩溃）。</summary>
     public event Action<Exception?>? ConnectionClosed;
@@ -87,6 +110,11 @@ public sealed class PluginContext : IAsyncDisposable
                     Dispatch(() => HotkeyPressed?.Invoke(hp.ActionId));
                 break;
 
+            case IpcTypes.HotkeysChanged:
+                if (envelope.GetPayload<HotkeysChangedPayload>() is { } hc)
+                    Dispatch(() => HotkeysChanged?.Invoke(hc.Results));
+                break;
+
             case IpcTypes.MenuInvoked:
                 if (envelope.GetPayload<MenuInvokedPayload>() is { } mi)
                     Dispatch(() => MenuInvoked?.Invoke(mi));
@@ -95,6 +123,14 @@ public sealed class PluginContext : IAsyncDisposable
             case IpcTypes.SettingsChanged:
                 if (envelope.GetPayload<SettingsChangedPayload>() is { } sc)
                     Dispatch(() => SettingsChanged?.Invoke(sc));
+                break;
+
+            case IpcTypes.ThemeChanged:
+                if (envelope.GetPayload<ThemeChangedPayload>() is { } tc && tc.Theme.Colors.Count > 0)
+                {
+                    CurrentTheme = tc.Theme;
+                    Dispatch(() => ThemeChanged?.Invoke(tc.Theme));
+                }
                 break;
 
             case IpcTypes.Shutdown:

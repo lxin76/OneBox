@@ -489,12 +489,12 @@ public partial class SettingsCenterWindow : Window
 
         var contextMenu = new CheckBox
         {
-            Content = "把「OneBox 小工具」加进桌面与文件夹的右键菜单",
+            Content = "在桌面与文件夹的右键菜单里加入「OneBox 工具箱」",
             IsChecked = settings.AddToContextMenu,
             Margin = new Thickness(0, 8, 0, 0),
         };
         FormHost.Children.Add(contextMenu);
-        FormHost.Children.Add(Hint("勾选后不用先去找托盘图标：在桌面或文件夹空白处右键，就能直接打开工具箱、设置或某个小工具的窗口。"));
+        FormHost.Children.Add(Hint("勾选后在桌面或文件夹空白处右键就能打开工具箱，不必先去找托盘图标。"));
 
         AddSection("目录", topMargin: 16);
         FormHost.Children.Add(Hint($"插件安装位置：{HostPaths.PluginsDirectory}"));
@@ -670,12 +670,12 @@ public partial class SettingsCenterWindow : Window
         _registry.Save();
     }
 
-    /// <summary>勾选/取消右键菜单：写设置并立即同步注册表，小工具的菜单项会跟着刷新。</summary>
+    /// <summary>勾选/取消右键菜单：写设置并立即同步注册表。</summary>
     private void ApplyContextMenu(bool enabled)
     {
         _registry.Settings.AddToContextMenu = enabled;
         _registry.Save();
-        ContextMenuRegistrar.Sync(_manager, _registry);
+        ContextMenuRegistrar.Sync(_registry);
     }
 
     private void ApplyAutoStart(bool enabled, TextBlock tip)

@@ -13,6 +13,17 @@ public partial class NoteWindow : Window
     /// <summary>文本变化事件（带当前全文）。</summary>
     public event Action<string>? NoteChanged;
 
+    /// <summary>
+    /// 更新底部提示里的键位说明。
+    ///
+    /// 键位不能写死在 XAML 里：用户可以在工具箱的热键页改键，
+    /// 窗口若还显示旧键位，就会与实际行为对不上。
+    /// </summary>
+    public string HotkeyHint
+    {
+        set => HintText.Text = value;
+    }
+
     /// <summary>设置文本且不触发保存回调（用于回填已保存内容）。</summary>
     public string NoteText
     {

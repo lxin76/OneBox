@@ -15,6 +15,7 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolConverter x:Key="InverseBool"/>
         <conv:NonEmptyToVisibilityConverter x:Key="NonEmptyToVisibility"/>
+        <conv:FixedHotkeyTooltipConverter x:Key="FixedToTooltip"/>
 
         <!-- 颜色一律引用主题键（键名与插件共用，见 ThemeKeys），具体色值由
              ThemeCatalog 给出、宿主启动时刷进应用资源。这里不再写死色值：
@@ -375,6 +376,8 @@
                             </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                            <Button Content="检查与其他软件冲突" Click="OnCheckExternalConflicts" Margin="0,0,6,0" Padding="10,5"
+                                    ToolTip="逐个试探当前热键是否已被其他软件注册（只提示，不会改动任何设置）"/>
                             <Button Content="全部展开" Click="OnExpandAllHotkeys" Margin="0,0,6,0" Padding="10,5"/>
                             <Button Content="全部折叠" Click="OnCollapseAllHotkeys" Padding="10,5"/>
                         </StackPanel>
@@ -454,28 +457,41 @@
                                                     <DataTemplate>
                                                         <!-- 冲突行整体高亮：底色泛红 + 左侧红条 + 红色边框，
                                                              三重强调，保证在一屏热键里能一眼扫到 -->
-                                                        <Border Background="{Binding RowBackground}"
-                                                                BorderThickness="1" CornerRadius="6"
+                                                        <Border BorderThickness="1" CornerRadius="6"
                                                                 Padding="10,8" Margin="0,0,0,5">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
+                                                                    <Setter Property="Background" Value="{Binding RowBackground}"/>
                                                                     <Setter Property="BorderBrush" Value="{DynamicResource Theme.LineSoft}"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding HasConflict}" Value="True">
                                                                             <Setter Property="BorderBrush" Value="{DynamicResource Theme.ErrorLine}"/>
+                                                                        </DataTrigger>
+                                                                        <!-- 录制中：整行换成强调底色 + 强调边框，避免"点了没反应"的错觉 -->
+                                                                        <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource Theme.AccentSoft}"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
 
                                                             <Grid>
+                                                                <!-- 操作列（改键/恢复默认）紧跟键位，而不是贴在最右侧：
+                                                                     窗口收窄时被挤掉的应该是用途说明，按钮必须始终可见，
+                                                                     否则"能不能改键"取决于窗口拉多宽 -->
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="Auto"/>
                                                                     <ColumnDefinition Width="150"/>
+                                                                    <ColumnDefinition Width="Auto"/>
                                                                     <ColumnDefinition Width="*"/>
                                                                     <ColumnDefinition Width="Auto"/>
                                                                 </Grid.ColumnDefinitions>
                                                                 <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
                                                                     <RowDefinition Height="Auto"/>
                                                                     <RowDefinition Height="Auto"/>
                                                                 </Grid.RowDefinitions>
@@ -484,26 +500,96 @@
                                                                         Background="{Binding AccentBrush}"
                                                                         Margin="0,1,10,1"/>
 
-                                                                <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Combination}"
-                                                                           Style="{StaticResource HotkeyKeyText}"/>
+                                                                <!-- 键位：录制中换成提示语并变成强调色，用户一眼知道"正在听按键" -->
+                                                                <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding DisplayCombination}"
+                                                                           ToolTip="{Binding DefaultCombination, StringFormat=默认键：{0}}">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource HotkeyKeyText}">
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource Theme.AccentText}"/>
+                                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
 
-                                                                <TextBlock Grid.Column="2" Grid.Row="0" Text="{Binding Description}"
+                                                                <!-- 改键 / 恢复默认：固定热键不给改（救急键，改了等于自断后路） -->
+                                                                <StackPanel Grid.Column="2" Grid.Row="0" Orientation="Horizontal"
+                                                                            Margin="0,0,10,0" VerticalAlignment="Center">
+                                                                    <Button Content="{Binding RecordButtonText}" Padding="9,3" FontSize="11"
+                                                                            Tag="{Binding}" Click="OnRecordHotkeyClick"
+                                                                            IsEnabled="{Binding CanEdit}"
+                                                                            ToolTip="{Binding IsFixed, Converter={StaticResource FixedToTooltip}}"/>
+                                                                    <Button Content="恢复默认" Padding="9,3" FontSize="11" Margin="6,0,0,0"
+                                                                            Tag="{Binding}" Click="OnResetHotkeyClick"
+                                                                            ToolTip="{Binding DefaultCombination, StringFormat=恢复为插件默认键 {0}}">
+                                                                        <Button.Style>
+                                                                            <Style TargetType="Button">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsCustomized}" Value="True">
+                                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Button.Style>
+                                                                    </Button>
+                                                                </StackPanel>
+
+                                                                <TextBlock Grid.Column="3" Grid.Row="0" Text="{Binding Description}"
                                                                            Style="{StaticResource Hint}"
                                                                            VerticalAlignment="Center"
-                                                                           Margin="0,0,10,0"/>
+                                                                           Margin="0,0,10,0"
+                                                                           TextTrimming="CharacterEllipsis"/>
 
-                                                                <TextBlock Grid.Column="3" Grid.Row="0" Text="{Binding Status}"
+                                                                <TextBlock Grid.Column="4" Grid.Row="0" Text="{Binding Status}"
                                                                            FontSize="11" VerticalAlignment="Center"
                                                                            FontWeight="SemiBold"
                                                                            Foreground="{Binding StatusBrush}"/>
 
                                                                 <!-- 冲突详情：点名是哪个小工具的哪条热键撞了，
                                                                      用户不必自己去别的分组里翻找 -->
-                                                                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                                                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4"
                                                                            Text="{Binding ConflictDetail}"
                                                                            Foreground="{DynamicResource Theme.Error}" FontSize="11"
                                                                            TextWrapping="Wrap" Margin="0,5,0,1"
                                                                            Visibility="{Binding HasConflict, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                                <!-- 与其他软件冲突：单独一条、带底色，比普通提示更醒目。
+                                                                     这类冲突允许保存（不同软件未必同时运行），但必须让用户明确知情 -->
+                                                                <Border Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                                                                        Background="{DynamicResource Theme.Card}"
+                                                                        BorderBrush="{DynamicResource Theme.Warn}"
+                                                                        BorderThickness="1" CornerRadius="4"
+                                                                        Padding="7,5" Margin="0,5,0,1"
+                                                                        Visibility="{Binding HasExternalNotice, Converter={StaticResource BoolToVisibility}}">
+                                                                    <TextBlock Text="{Binding ExternalNotice}"
+                                                                               Foreground="{DynamicResource Theme.Warn}" FontSize="11"
+                                                                               FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                                </Border>
+
+                                                                <!-- 本条热键当前就因其他软件占用而没能生效 -->
+                                                                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4"
+                                                                           Text="{Binding ExternalConflictDetail}"
+                                                                           Foreground="{DynamicResource Theme.Warn}" FontSize="11"
+                                                                           FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,5,0,1"
+                                                                           Visibility="{Binding OccupiedByOtherApp, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                                <!-- 录制中的操作指引：明确告诉用户下一步该做什么、怎么退出 -->
+                                                                <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4"
+                                                                           Text="{Binding EditHint}"
+                                                                           Foreground="{DynamicResource Theme.AccentText}" FontSize="11"
+                                                                           FontWeight="SemiBold" Margin="0,5,0,1"
+                                                                           Visibility="{Binding IsRecording, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                                <!-- 改键操作的即时结果：冲突原因、被占用警告或已保存 -->
+                                                                <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="4"
+                                                                           Text="{Binding EditMessage}"
+                                                                           Foreground="{Binding EditMessageBrush}" FontSize="11"
+                                                                           TextWrapping="Wrap" Margin="0,5,0,1"
+                                                                           Visibility="{Binding HasEditMessage, Converter={StaticResource BoolToVisibility}}"/>
                                                             </Grid>
                                                         </Border>
                                                     </DataTemplate>
