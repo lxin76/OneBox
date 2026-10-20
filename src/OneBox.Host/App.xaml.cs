@@ -312,6 +312,10 @@ public partial class App : Application
         // 双击托盘：打开工具箱（平台的主入口）
         tray.TrayMouseDoubleClick += (_, _) => OpenToolbox();
 
+        // 左键单击也打开工具箱：托盘图标是平台的主入口，双击对随手一点来说太重。
+        // OpenToolbox 是幂等的（已打开时只 Activate + Rebuild），双击触发两次单击事件也无副作用。
+        tray.TrayLeftMouseUp += (_, _) => OpenToolbox();
+
         return tray;
     }
 

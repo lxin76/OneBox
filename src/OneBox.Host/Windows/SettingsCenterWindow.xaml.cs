@@ -486,6 +486,10 @@ public partial class SettingsCenterWindow : Window
             Margin = new Thickness(0, 8, 0, 0),
         };
         FormHost.Children.Add(showToolbox);
+        FormHost.Children.Add(Hint(
+            "单击（或双击）托盘图标也能打开工具箱。"
+            + "若任务栏里看不到 OneBox 图标，请在「任务栏设置 → 系统托盘」中把它固定到托盘区；"
+            + "也可以给 OneBox.exe --toolbox 建一个桌面快捷方式，并在快捷方式属性里设置快捷键。"));
 
         var contextMenu = new CheckBox
         {
