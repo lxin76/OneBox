@@ -1,10 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using OneBox.Plugins.Screenshot.Controls;
 using OneBox.Plugins.Screenshot.Core;
 using OneBox.Plugins.Screenshot.Services;
 
@@ -13,6 +15,7 @@ namespace OneBox.Plugins.Screenshot.Windows;
 /// <summary>
 /// 贴图窗口：把截图钉在屏幕上，始终浮在其它窗口最上层，切换应用也不会被遮挡。
 /// 支持拖动、鼠标滚轮缩放、右下角等比缩放，以及复制/保存/识别/关闭。
+/// 图片下方第二行是编辑栏，可在贴图上绘制矩形/椭圆边框、箭头与文字，并逐步撤销。
 /// </summary>
 public partial class PinWindow : Window
 {
@@ -23,10 +26,28 @@ public partial class PinWindow : Window
     private static readonly TimeSpan TopmostReassertInterval = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// 底部外部工具条的高度（DIP）。窗口高度 = 图片显示高度 + 该值；
-    /// 所有"按窗口高度反推图片显示高度"的地方都要先扣掉它。
+    /// 底部操作工具条的高度（DIP）。窗口高度 = 图片显示高度 + 操作条 + 编辑条；
+    /// 所有"按窗口高度反推图片显示高度"的地方都要先扣掉这些固定高度。
     /// </summary>
     internal const double ToolbarHeight = 34.0;
+
+    /// <summary>图片下方第二行编辑栏的高度（DIP），与操作条同高。</summary>
+    internal const double EditToolbarHeight = 34.0;
+
+    /// <summary>图片下方的全部固定高度。</summary>
+    internal const double ChromeHeight = ToolbarHeight + EditToolbarHeight;
+
+    /// <summary>标注色块未选中时的边框颜色。</summary>
+    private static readonly Brush SwatchBorderIdle =
+        CreateFrozenBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF));
+
+    /// <summary>工具/形状按钮被选中时的底色。</summary>
+    private static readonly Brush ActiveToolBrush =
+        CreateFrozenBrush(Color.FromArgb(0x55, 0x3B, 0x82, 0xF6));
+
+    /// <summary>文字框的选区颜色。</summary>
+    private static readonly Brush TextEditorSelectionBrush =
+        CreateFrozenBrush(Color.FromArgb(0x66, 0x3B, 0x82, 0xF6));
 
     private readonly BitmapSource _source;
     private readonly Action<PinWindow>? _onClosed;
@@ -47,6 +68,43 @@ public partial class PinWindow : Window
     private bool _selecting;
     private OcrSelection _selection;
     private bool _loadingLayout;
+
+    // ---- 贴图标注状态 ----
+    private readonly PinAnnotationHistory _annotations = new();
+    private PinEditTool _editTool;
+    private PinShapeKind _shapeKind = PinShapeKind.Rectangle;
+    private AnnotationColor _shapeColor = PinAnnotationPalette.DefaultColor;
+    private double _shapeThickness = PinAnnotationLimits.DefaultThickness;
+    private AnnotationColor _textColor = PinAnnotationPalette.DefaultColor;
+    private double _textFontSize = PinAnnotationLimits.DefaultFontSize;
+
+    private bool _drawingShape;
+    private Point _shapeStartImage;
+    private PinAnnotation? _shapeDraft;
+
+    private bool _drawingArrow;
+    private Point _arrowStartImage;
+    private ArrowAnnotation? _arrowDraft;
+
+    private Border? _textEditorHost;
+    private TextBox? _textEditor;
+    private Point _textOriginImage;
+    private double _textMaxWidthImage;
+    private IntPtr _foregroundBeforeEditing;
+    private bool _endingTextEditing;
+    private bool _suppressNextImageClick;
+
+    private int _annotationVersion;
+    private readonly List<Button> _shapeColorButtons = [];
+    private readonly List<Button> _textColorButtons = [];
+
+    private enum PinEditTool
+    {
+        None,
+        Shape,
+        Arrow,
+        Text,
+    }
 
     /// <summary>高亮颜色（半透明蓝），与系统文本选择的观感接近。</summary>
     private static readonly Brush HighlightBrush = new SolidColorBrush(Color.FromArgb(96, 60, 150, 255));
@@ -69,6 +127,9 @@ public partial class PinWindow : Window
     /// <summary>请求删除本贴图（连同已保存的文件，由插件主体决定）。</summary>
     public event Action<PinWindow>? DeleteRequested;
 
+    /// <summary>标注新增或撤销后触发；插件据此清空 OCR 版面缓存。</summary>
+    public event Action? AnnotationsChanged;
+
     /// <summary>本贴图已保存到的文件路径；未保存过为 null。</summary>
     public string? SavedFilePath { get; set; }
 
@@ -87,18 +148,23 @@ public partial class PinWindow : Window
         _imageAspect = source.PixelWidth / (double)Math.Max(1, source.PixelHeight);
 
         ShotImage.Source = source;
+        AnnotationLayer.SetImageSize(source.PixelWidth, source.PixelHeight);
+        AnnotationLayer.SetAnnotations(_annotations.Items);
 
         // 选择文字按钮平时淡显，进入模式后点亮
         SelectTextButton.Opacity = 0.45;
 
+        BuildColorPalettes();
+        UpdateEditToolUi();
+
         // 初始尺寸：不超过屏幕的 60%，小图保持原样。
-        // 窗口高度 = 图片高度 + 底部工具条高度（工具条外置在贴图下方，不占贴图区域）。
+        // 窗口高度 = 图片高度 + 底部操作条 + 编辑条。
         var area = ScreenCapture.GetVirtualScreenBounds()
                    ?? new System.Drawing.Rectangle(0, 0, 1920, 1080);
         var scale = Math.Min(1.0, Math.Min(area.Width * 0.6 / source.PixelWidth,
-                                            (area.Height - ToolbarHeight) * 0.6 / source.PixelHeight));
+                                            (area.Height - ChromeHeight) * 0.6 / source.PixelHeight));
         Width = Math.Max(80, source.PixelWidth * scale);
-        Height = Math.Max(60, source.PixelHeight * scale) + ToolbarHeight;
+        Height = Math.Max(60, source.PixelHeight * scale) + ChromeHeight;
 
         // 默认放到屏幕右下角附近，避免盖住用户正在看的内容
         var areaDip = ScreenCapture.GetVirtualScreenDip(this);
@@ -110,8 +176,23 @@ public partial class PinWindow : Window
         // 若这里用 AssertTopmost，多张贴图会每 1 秒互相插队，形成循环争抢。
         _topmostTimer.Tick += (_, _) => { if (_pinned) TopmostKeeper.ReassertTopmost(this); };
 
-        // 缩放/改变窗口尺寸后，高亮矩形要按新的显示比例重画
-        ShotImage.SizeChanged += (_, _) => RedrawHighlight();
+        // 缩放/改变窗口尺寸后，高亮矩形与标注要按新的显示比例重画
+        ShotImage.SizeChanged += (_, _) =>
+        {
+            RedrawHighlight();
+            AnnotationLayer.InvalidateVisual();
+        };
+
+        // 文字编辑期间点击编辑框外：先提交，再继续处理这次点击。
+        PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
+
+        // 截图流程会临时隐藏贴图；隐藏时结束编辑状态，避免恢复显示后卡在标注模式。
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible && _editTool != PinEditTool.None) ExitEditTool();
+        };
+
+        UpdateInfo();
     }
 
     /// <summary>
@@ -148,8 +229,42 @@ public partial class PinWindow : Window
     /// <summary>当前选区（诊断用）。</summary>
     public OcrSelection CurrentSelection => _selection;
 
-    /// <summary>原始位图。</summary>
+    /// <summary>原始位图；导出时应改用 <see cref="ComposeImage"/>。</summary>
     public BitmapSource Source => _source;
+
+    /// <summary>当前已提交的标注数量（诊断用）。</summary>
+    public int AnnotationCount => _annotations.Count;
+
+    /// <summary>当前是否有标注。</summary>
+    public bool HasAnnotations => _annotations.Count > 0;
+
+    /// <summary>标注版本号；OCR 识别期间标注发生变化时用于丢弃过期版面。</summary>
+    public int AnnotationVersion => _annotationVersion;
+
+    /// <summary>
+    /// 生成包含全部已提交标注的位图，用于复制/保存/OCR。
+    /// 没有标注时直接返回原图，不额外分配位图。
+    /// </summary>
+    public BitmapSource ComposeImage()
+    {
+        if (!Dispatcher.CheckAccess())
+            return Dispatcher.Invoke(new Func<BitmapSource>(ComposeImage));
+
+        if (_annotations.Count == 0) return _source;
+
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawImage(_source, new Rect(0, 0, _source.PixelWidth, _source.PixelHeight));
+            PinAnnotationRenderer.Draw(context, _annotations.Items, 1, 1, 1.0);
+        }
+
+        var target = new RenderTargetBitmap(
+            _source.PixelWidth, _source.PixelHeight, 96, 96, PixelFormats.Pbgra32);
+        target.Render(visual);
+        target.Freeze();
+        return target;
+    }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
@@ -164,6 +279,14 @@ public partial class PinWindow : Window
         // 因此走无条件抬升的 BringToFrontWithoutActivating，而不是不改 Z 序的 AssertTopmost。
         // 注意：周期性的置顶保活绝不能这么做，否则多张贴图会互相争抢层叠次序。
         if (_pinned) TopmostKeeper.BringToFrontWithoutActivating(this);
+    }
+
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        // 编辑栏交互时为了 Ctrl+Z 临时清除了 WS_EX_NOACTIVATE；
+        // 失焦后恢复“点击不激活”，下一次编辑栏交互会重新临时打开。
+        TopmostKeeper.SetNoActivate(this, true);
     }
 
     // ---- 置顶保活 ----
@@ -181,8 +304,9 @@ public partial class PinWindow : Window
     private void ApplyPinnedState(bool pinned)
     {
         _pinned = pinned;
-        // ApplyPasteStyle 在置顶时会无条件插队，因此这里不需要再调 AssertTopmost
-        TopmostKeeper.ApplyPasteStyle(this, pinned);
+        // ApplyPasteStyle 在置顶时会无条件插队，因此这里不需要再调 AssertTopmost。
+        // 文字编辑期间要保留激活权限，否则置顶状态一变化键盘焦点就被收走。
+        TopmostKeeper.ApplyPasteStyle(this, pinned, noActivate: _textEditor is null);
 
         if (pinned) _topmostTimer.Start();
         else _topmostTimer.Stop();
@@ -222,6 +346,10 @@ public partial class PinWindow : Window
     {
         base.OnMouseLeftButtonDown(e);
 
+        // 点进正在编辑的文本框：交给 TextBox 自己处理，不启动拖动/标注
+        if (_textEditor is not null && IsInside(e.OriginalSource as DependencyObject, _textEditorHost))
+            return;
+
         // 工具条与手柄上的点击自行处理，不触发拖动
         if (e.OriginalSource is DependencyObject d && IsInsideButton(d))
         {
@@ -233,6 +361,36 @@ public partial class PinWindow : Window
         // 用户点击了这张贴图：把它抬到置顶组最前，便于在互相遮挡时取用。
         // 不能依赖 OnActivated——窗口带 WS_EX_NOACTIVATE，点击通常不会触发激活。
         BringToFront();
+
+        // 刚刚为了提交文字而吞掉的那次点击，不再继续画新标注
+        if (_suppressNextImageClick)
+        {
+            _suppressNextImageClick = false;
+            e.Handled = true;
+            return;
+        }
+
+        // 编辑工具启用时，左键拖动/点击用于标注，不再移动窗口
+        if (_editTool == PinEditTool.Shape)
+        {
+            BeginShape(e.GetPosition(ShotImage));
+            e.Handled = true;
+            return;
+        }
+
+        if (_editTool == PinEditTool.Arrow)
+        {
+            BeginArrow(e.GetPosition(ShotImage));
+            e.Handled = true;
+            return;
+        }
+
+        if (_editTool == PinEditTool.Text)
+        {
+            BeginTextEditing(e.GetPosition(ShotImage));
+            e.Handled = true;
+            return;
+        }
 
         // 文字选择模式下，左键拖动改为划选文字，不再移动窗口
         if (_selectMode)
@@ -259,6 +417,35 @@ public partial class PinWindow : Window
         _lastPhysical = PointToScreen(_pressPointInWindow);
         CaptureMouse();
         e.Handled = true;
+    }
+
+    /// <summary>文字编辑期间点击编辑框外：先提交，再让本次点击继续落到工具条/图片/手柄上。</summary>
+    private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+
+        // 点击编辑栏表示用户要编辑贴图：临时允许激活，让 Ctrl+Z 等键盘快捷键可用。
+        // 点击图片本身仍保持“不抢焦点”，不影响下方应用。
+        if (IsInside(source, EditToolbar)) EnsureKeyboardFocusForEditing();
+
+        if (_textEditor is null) return;
+        if (IsInside(source, _textEditorHost)) return;
+
+        var onResizeHandle = IsInside(source, ResizeHandle);
+        var onImage = !onResizeHandle && IsPointInsideImage(e.GetPosition(ShotImage));
+
+        CommitTextEditing(restoreFocus: false);
+
+        // 点击图片本身时，提交后不要再立刻新建一个文字框
+        if (onImage) _suppressNextImageClick = true;
+    }
+
+    /// <summary>编辑栏交互时临时解除 WS_EX_NOACTIVATE，让贴图窗能接收 Ctrl+Z 等快捷键。</summary>
+    private void EnsureKeyboardFocusForEditing()
+    {
+        TopmostKeeper.SetNoActivate(this, false);
+        if (!IsActive) Activate();
+        if (!IsKeyboardFocusWithin) Keyboard.Focus(this);
     }
 
     /// <summary>
@@ -325,6 +512,18 @@ public partial class PinWindow : Window
     {
         base.OnMouseMove(e);
 
+        if (_drawingArrow)
+        {
+            UpdateArrowDraft(e.GetPosition(ShotImage));
+            return;
+        }
+
+        if (_drawingShape)
+        {
+            UpdateShapeDraft(e.GetPosition(ShotImage));
+            return;
+        }
+
         if (_selecting && _layout is not null)
         {
             ExtendSelectTo(e.GetPosition(ShotImage));
@@ -374,7 +573,7 @@ public partial class PinWindow : Window
 
             width = Math.Max(80, Math.Min(width, _source.PixelWidth * 6.0));
             Width = width;
-            Height = width / _imageAspect + ToolbarHeight;
+            Height = width / _imageAspect + ChromeHeight;
             UpdateInfo();
         }
     }
@@ -382,6 +581,21 @@ public partial class PinWindow : Window
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
+
+        // 箭头/形状标注先结束，避免被双击关闭/文字选择逻辑接管
+        if (_drawingArrow)
+        {
+            FinishArrow(e.GetPosition(ShotImage));
+            e.Handled = true;
+            return;
+        }
+
+        if (_drawingShape)
+        {
+            FinishShape(e.GetPosition(ShotImage));
+            e.Handled = true;
+            return;
+        }
 
         // 划选结束：松开即复制，这是截图取字最常见的意图
         if (_selecting)
@@ -394,8 +608,9 @@ public partial class PinWindow : Window
 
         // 双击图片：直接关闭预览（恢复原始尺寸改用 Alt+0 或工具条按钮）。
         // 认按下时记下的"本次点击属于双击序列"，而不是抬起这一帧的 ClickCount（见字段说明）。
-        // 期间只要发生过拖动（_dragStarted），就不是双击。
-        if (_clickIsDouble && !_dragStarted)
+        // 期间只要发生过拖动（_dragStarted），或者正在标注/选字，就不是双击。
+        if (_clickIsDouble && !_dragStarted && _editTool == PinEditTool.None &&
+            !_selectMode && _textEditor is null)
         {
             EndInteraction();
             Close();
@@ -406,8 +621,28 @@ public partial class PinWindow : Window
         EndInteraction();
     }
 
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+
+        // 鼠标捕获被系统收走时，正在拖的箭头/形状按取消处理，不留下半成品
+        if (!_drawingShape && !_drawingArrow) return;
+
+        _drawingShape = false;
+        _drawingArrow = false;
+        _shapeDraft = null;
+        _arrowDraft = null;
+        AnnotationLayer.SetDraft(null);
+
+        // 捕获被系统收走属于本次标注中止，同样退回普通状态
+        ExitEditTool();
+    }
+
     private void OnResizeStart(object sender, MouseButtonEventArgs e)
     {
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false);
+        CancelDraft();
+
         _resizing = true;
         _resizeStart = e.GetPosition(this);
         _resizeStartWidth = ActualWidth;
@@ -470,6 +705,8 @@ public partial class PinWindow : Window
     /// </summary>
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false);
+
         // 换算前的物理位置（旧 DPI 下），此刻窗口尚未按新 DPI 重排
         var before = PhysicalTopLeft();
 
@@ -483,7 +720,7 @@ public partial class PinWindow : Window
             var physicalWidth = Width * oldDpi.DpiScaleX;
             var width = Math.Max(80, physicalWidth / newDpi.DpiScaleX);
             Width = width;
-            Height = width / _imageAspect + ToolbarHeight;
+            Height = width / _imageAspect + ChromeHeight;
         }
 
         var after = PhysicalTopLeft();
@@ -524,20 +761,27 @@ public partial class PinWindow : Window
         _dragging = false;
         _dragStarted = false;
         _resizing = false;
-
-        // 划选模式下光标是 I 形，不能被拖动光标覆盖
-        if (Cursor == Cursors.SizeAll) Cursor = _selectMode ? Cursors.IBeam : Cursors.Arrow;
+        UpdateCursor();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
 
+        // 正在画箭头/形状时不允许缩放，避免草稿坐标与显示比例错位
+        if (_drawingShape || _drawingArrow)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false);
+
         // 滚轮缩放：按 1.1 倍步进
         var factor = e.Delta > 0 ? 1.1 : 1 / 1.1;
         var width = Math.Clamp(Width * factor, 60, _source.PixelWidth * 6.0);
         Width = width;
-        Height = width / _imageAspect + ToolbarHeight;
+        Height = width / _imageAspect + ChromeHeight;
         UpdateInfo();
         e.Handled = true;
     }
@@ -546,19 +790,28 @@ public partial class PinWindow : Window
 
     private void ResetToOriginalSize()
     {
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false);
+        CancelDraft();
+
         // 目标宽度 = 原图像素宽；超过屏幕 90% 时回落到该上限（屏幕尺寸按 DIP 计）
         var area = ScreenCapture.GetVirtualScreenDip(this);
         var target = Math.Min(_source.PixelWidth, area.Width * 0.9);
         Width = Math.Max(80, target);
-        Height = Width / _imageAspect + ToolbarHeight;
+        Height = Width / _imageAspect + ChromeHeight;
         UpdateInfo();
     }
 
     private void UpdateInfo()
     {
         var zoom = Width / _source.PixelWidth * 100;
-        var mode = _selectMode ? " · 选择文字" : "";
-        InfoText.Text = $"{_source.PixelWidth} × {_source.PixelHeight} · {zoom:0}% · {(_pinned ? "置顶" : "未置顶")}{mode}";
+        var mode = _textEditor is not null ? " · 输入文字"
+            : _editTool == PinEditTool.Shape ? " · 框选标注"
+            : _editTool == PinEditTool.Arrow ? " · 箭头标注"
+            : _editTool == PinEditTool.Text ? " · 文字标注"
+            : _selectMode ? " · 选择文字"
+            : "";
+        var count = _annotations.Count > 0 ? $" · 标注 {_annotations.Count}" : "";
+        InfoText.Text = $"{_source.PixelWidth} × {_source.PixelHeight} · {zoom:0}% · {(_pinned ? "置顶" : "未置顶")}{mode}{count}";
     }
 
     private static bool IsInsideButton(DependencyObject? source)
@@ -569,6 +822,28 @@ public partial class PinWindow : Window
             source = VisualTreeHelper.GetParent(source);
         }
         return false;
+    }
+
+    /// <summary>source 是否位于 ancestor 的视觉子树内（含自身）。</summary>
+    private static bool IsInside(DependencyObject? source, DependencyObject? ancestor)
+    {
+        if (ancestor is null) return false;
+
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor)) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    private bool IsPointInsideImage(Point inImage)
+    {
+        var width = ShotImage.ActualWidth;
+        var height = ShotImage.ActualHeight;
+        return width > 0 && height > 0 &&
+               inImage.X >= 0 && inImage.Y >= 0 &&
+               inImage.X <= width && inImage.Y <= height;
     }
 
     // ---- 文字选择 ----
@@ -582,6 +857,9 @@ public partial class PinWindow : Window
     /// <summary>进入或退出文字选择模式。</summary>
     public async void ToggleTextSelect()
     {
+        // 编辑工具与 OCR 选字互斥
+        if (_editTool != PinEditTool.None) ExitEditTool();
+
         if (_selectMode)
         {
             ExitTextSelect();
@@ -596,7 +874,7 @@ public partial class PinWindow : Window
         }
 
         _selectMode = true;
-        Cursor = Cursors.IBeam;
+        UpdateCursor();
         SelectTextButton.Opacity = 1.0;
         RedrawHighlight();
 
@@ -616,6 +894,7 @@ public partial class PinWindow : Window
         }
 
         _loadingLayout = true;
+        var versionAtStart = _annotationVersion;
         Flash("正在识别文字…");
 
         // OCR 会占用 UI 线程几百毫秒。这里让出一次调度，且优先级低于 Render，
@@ -637,8 +916,15 @@ public partial class PinWindow : Window
             _loadingLayout = false;
         }
 
-        // 识别期间用户可能已经退出模式或关掉了窗口
+        // 识别期间用户可能已经退出模式、关掉了窗口，或又加/撤销了标注
         if (!_selectMode) return;
+
+        if (versionAtStart != _annotationVersion)
+        {
+            ExitTextSelect();
+            Flash("标注已变化，请重新进入选择文字");
+            return;
+        }
 
         _layout = layout;
         if (_layout is null || _layout.IsEmpty)
@@ -656,11 +942,12 @@ public partial class PinWindow : Window
     {
         _selectMode = false;
         _selecting = false;
-        Cursor = Cursors.Arrow;
         SelectTextButton.Opacity = 0.45;
         _selection = default;
         HighlightLayer.Children.Clear();
-        if (Mouse.Captured == this && !_dragging && !_resizing) ReleaseMouseCapture();
+        if (Mouse.Captured == this && !_dragging && !_resizing && !_drawingShape && !_drawingArrow)
+            ReleaseMouseCapture();
+        UpdateCursor();
         UpdateInfo();
     }
 
@@ -716,13 +1003,673 @@ public partial class PinWindow : Window
         Flash(ok ? $"已复制 {text.Length} 个字符" : "复制失败，剪贴板可能被占用");
     }
 
+    // ---- 贴图标注 ----
+
+    private void BuildColorPalettes()
+    {
+        foreach (var choice in PinAnnotationPalette.Choices)
+        {
+            var shapeButton = CreateSwatchButton(choice, OnShapeColorClick);
+            _shapeColorButtons.Add(shapeButton);
+            ShapeColorPanel.Children.Add(shapeButton);
+
+            var textButton = CreateSwatchButton(choice, OnTextColorClick);
+            _textColorButtons.Add(textButton);
+            TextColorPanel.Children.Add(textButton);
+        }
+
+        UpdateSwatchSelection(_shapeColorButtons, _shapeColor);
+        UpdateSwatchSelection(_textColorButtons, _textColor);
+
+        ShapeThicknessText.Text = _shapeThickness.ToString("0");
+        TextSizeText.Text = _textFontSize.ToString("0");
+    }
+
+    private Button CreateSwatchButton(PinAnnotationColorChoice choice, RoutedEventHandler onClick)
+    {
+        var button = new Button
+        {
+            Style = (Style)FindResource("SwatchButton"),
+            Background = CreateBrush(choice.Color),
+            Tag = choice,
+            ToolTip = choice.Name,
+        };
+        button.Click += onClick;
+        return button;
+    }
+
+    private void OnShapeColorClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: PinAnnotationColorChoice choice }) return;
+
+        _shapeColor = choice.Color;
+        UpdateSwatchSelection(_shapeColorButtons, _shapeColor);
+        Flash($"边框颜色：{choice.Name}");
+    }
+
+    private void OnTextColorClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: PinAnnotationColorChoice choice }) return;
+
+        _textColor = choice.Color;
+        UpdateSwatchSelection(_textColorButtons, _textColor);
+        Flash($"文字颜色：{choice.Name}");
+    }
+
+    private static void UpdateSwatchSelection(IReadOnlyList<Button> buttons, AnnotationColor selected)
+    {
+        foreach (var button in buttons)
+        {
+            if (button.Tag is not PinAnnotationColorChoice choice) continue;
+
+            var isSelected = choice.Color == selected;
+            button.BorderBrush = isSelected ? Brushes.White : SwatchBorderIdle;
+            button.BorderThickness = new Thickness(isSelected ? 2 : 1);
+        }
+    }
+
+    private void SetToolButtonState(Button button, bool active)
+        => button.Background = active ? ActiveToolBrush : Brushes.Transparent;
+
+    private void UpdateEditToolUi()
+    {
+        ShapeEditGroup.Visibility = _editTool == PinEditTool.Shape ? Visibility.Visible : Visibility.Collapsed;
+        StrokeEditGroup.Visibility = _editTool is PinEditTool.Shape or PinEditTool.Arrow
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        TextEditGroup.Visibility = _editTool == PinEditTool.Text ? Visibility.Visible : Visibility.Collapsed;
+
+        SetToolButtonState(ShapeToolButton, _editTool == PinEditTool.Shape);
+        SetToolButtonState(ArrowToolButton, _editTool == PinEditTool.Arrow);
+        SetToolButtonState(TextToolButton, _editTool == PinEditTool.Text);
+        SetToolButtonState(RectangleShapeButton, _shapeKind == PinShapeKind.Rectangle);
+        SetToolButtonState(EllipseShapeButton, _shapeKind == PinShapeKind.Ellipse);
+
+        UndoButton.IsEnabled = _annotations.CanUndo;
+        UndoButton.Opacity = _annotations.CanUndo ? 1.0 : 0.45;
+
+        UpdateCursor();
+    }
+
+    private void UpdateCursor()
+    {
+        if (_dragging)
+        {
+            Cursor = Cursors.SizeAll;
+            return;
+        }
+
+        Cursor = _textEditor is not null || _editTool == PinEditTool.Text || _selectMode
+            ? Cursors.IBeam
+            : _editTool is PinEditTool.Shape or PinEditTool.Arrow
+                ? Cursors.Cross
+                : Cursors.Arrow;
+    }
+
+    private void OnToggleShapeTool(object sender, RoutedEventArgs e)
+    {
+        if (_editTool == PinEditTool.Shape)
+        {
+            ExitEditTool();
+            return;
+        }
+
+        EnterEditTool(PinEditTool.Shape);
+    }
+
+    private void OnToggleArrowTool(object sender, RoutedEventArgs e)
+    {
+        if (_editTool == PinEditTool.Arrow)
+        {
+            ExitEditTool();
+            return;
+        }
+
+        EnterEditTool(PinEditTool.Arrow);
+    }
+
+    private void OnToggleTextTool(object sender, RoutedEventArgs e)
+    {
+        if (_editTool == PinEditTool.Text)
+        {
+            ExitEditTool();
+            return;
+        }
+
+        EnterEditTool(PinEditTool.Text);
+    }
+
+    private void EnterEditTool(PinEditTool tool)
+    {
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false, exitEditTool: false);
+        if (_selectMode) ExitTextSelect();
+
+        _editTool = tool;
+        UpdateEditToolUi();
+        UpdateInfo();
+        Flash(tool switch
+        {
+            PinEditTool.Shape => "选择工具：拖动绘制一个边框（完成后自动退出）",
+            PinEditTool.Arrow => "箭头：从起点拖到指向位置（完成后自动退出）",
+            _ => "文字标注：点击输入一段文字（提交后自动退出）",
+        });
+    }
+
+    private void ExitEditTool()
+    {
+        CancelDraft();
+        if (_textEditor is not null) CommitTextEditing(restoreFocus: false, exitEditTool: false);
+
+        // 退出编辑后恢复“点击不激活”；当前窗口若已激活仍可继续按 Ctrl+Z，
+        // 直到用户切到其他应用。
+        TopmostKeeper.SetNoActivate(this, true);
+
+        _editTool = PinEditTool.None;
+        UpdateEditToolUi();
+        UpdateInfo();
+
+        // 编辑栏激活过的窗口在单次操作后仍保持焦点，Ctrl+Z 可以立即撤销刚做的标注。
+        if (IsActive && !IsKeyboardFocusWithin) Keyboard.Focus(this);
+    }
+
+    private void OnRectangleShapeClick(object sender, RoutedEventArgs e)
+    {
+        _shapeKind = PinShapeKind.Rectangle;
+        UpdateEditToolUi();
+        Flash("边框形状：矩形");
+    }
+
+    private void OnEllipseShapeClick(object sender, RoutedEventArgs e)
+    {
+        _shapeKind = PinShapeKind.Ellipse;
+        UpdateEditToolUi();
+        Flash("边框形状：椭圆");
+    }
+
+    private void OnShapeThicknessDown(object sender, RoutedEventArgs e)
+        => AdjustShapeThickness(-1);
+
+    private void OnShapeThicknessUp(object sender, RoutedEventArgs e)
+        => AdjustShapeThickness(1);
+
+    private void AdjustShapeThickness(double delta)
+    {
+        _shapeThickness = PinAnnotationLimits.ClampThickness(_shapeThickness + delta);
+        ShapeThicknessText.Text = _shapeThickness.ToString("0");
+        Flash($"线条粗细：{_shapeThickness:0}px");
+    }
+
+    private void OnTextSizeDown(object sender, RoutedEventArgs e)
+        => AdjustTextSize(-2);
+
+    private void OnTextSizeUp(object sender, RoutedEventArgs e)
+        => AdjustTextSize(2);
+
+    private void AdjustTextSize(double delta)
+    {
+        _textFontSize = PinAnnotationLimits.ClampFontSize(_textFontSize + delta);
+        TextSizeText.Text = _textFontSize.ToString("0");
+        Flash($"文字大小：{_textFontSize:0}px");
+    }
+
+    private void BeginShape(Point displayPoint)
+    {
+        _drawingShape = true;
+        _shapeStartImage = ClampToImage(ToImagePixel(displayPoint));
+        _shapeDraft = null;
+        AnnotationLayer.SetDraft(null);
+        CaptureMouse();
+        UpdateCursor();
+    }
+
+    private void UpdateShapeDraft(Point displayPoint)
+    {
+        var end = ClampToImage(ToImagePixel(displayPoint));
+        _shapeDraft = PinAnnotationFactory.CreateShape(
+            _shapeKind,
+            _shapeStartImage.X,
+            _shapeStartImage.Y,
+            end.X,
+            end.Y,
+            _shapeColor,
+            _shapeThickness,
+            _source.PixelWidth,
+            _source.PixelHeight,
+            minSize: 0.5);
+        AnnotationLayer.SetDraft(_shapeDraft);
+    }
+
+    private void BeginArrow(Point displayPoint)
+    {
+        _drawingArrow = true;
+        _arrowStartImage = ClampToImage(ToImagePixel(displayPoint));
+        _arrowDraft = null;
+        AnnotationLayer.SetDraft(null);
+        CaptureMouse();
+        UpdateCursor();
+    }
+
+    private void UpdateArrowDraft(Point displayPoint)
+    {
+        var end = ClampToImage(ToImagePixel(displayPoint));
+        _arrowDraft = PinAnnotationFactory.CreateArrow(
+            _arrowStartImage.X,
+            _arrowStartImage.Y,
+            end.X,
+            end.Y,
+            _shapeColor,
+            _shapeThickness,
+            _source.PixelWidth,
+            _source.PixelHeight,
+            minLength: 0.5);
+        AnnotationLayer.SetDraft(_arrowDraft);
+    }
+
+    private void FinishArrow(Point displayPoint)
+    {
+        if (!_drawingArrow) return;
+
+        var end = ClampToImage(ToImagePixel(displayPoint));
+        _drawingArrow = false;
+        if (Mouse.Captured == this) ReleaseMouseCapture();
+
+        var arrow = PinAnnotationFactory.CreateArrow(
+            _arrowStartImage.X,
+            _arrowStartImage.Y,
+            end.X,
+            end.Y,
+            _shapeColor,
+            _shapeThickness,
+            _source.PixelWidth,
+            _source.PixelHeight);
+
+        _arrowDraft = null;
+        AnnotationLayer.SetDraft(null);
+
+        // 单次操作：画完一个箭头立即退出箭头工具，恢复拖动/双击关闭
+        ExitEditTool();
+
+        if (arrow is null)
+        {
+            Flash("箭头太短，未添加标注");
+            return;
+        }
+
+        AddAnnotation(arrow);
+    }
+
+    private void FinishShape(Point displayPoint)
+    {
+        if (!_drawingShape) return;
+
+        var end = ClampToImage(ToImagePixel(displayPoint));
+        _drawingShape = false;
+        if (Mouse.Captured == this) ReleaseMouseCapture();
+
+        var shape = PinAnnotationFactory.CreateShape(
+            _shapeKind,
+            _shapeStartImage.X,
+            _shapeStartImage.Y,
+            end.X,
+            end.Y,
+            _shapeColor,
+            _shapeThickness,
+            _source.PixelWidth,
+            _source.PixelHeight);
+
+        _shapeDraft = null;
+        AnnotationLayer.SetDraft(null);
+
+        // 单次操作：画完一个框立即退出选择工具，恢复拖动/双击关闭
+        ExitEditTool();
+
+        if (shape is null)
+        {
+            Flash("拖动范围太小，未添加标注");
+            return;
+        }
+
+        AddAnnotation(shape);
+    }
+
+    private void CancelDraft()
+    {
+        _drawingShape = false;
+        _shapeDraft = null;
+        _drawingArrow = false;
+        _arrowDraft = null;
+        AnnotationLayer.SetDraft(null);
+        if (Mouse.Captured == this) ReleaseMouseCapture();
+        UpdateCursor();
+    }
+
+    private Point ClampToImage(Point point)
+        => new(
+            Math.Clamp(point.X, 0, _source.PixelWidth),
+            Math.Clamp(point.Y, 0, _source.PixelHeight));
+
+    private void AddAnnotation(PinAnnotation annotation)
+    {
+        _annotations.Add(annotation);
+        OnAnnotationsChanged();
+
+        AppLog.Write($"贴图标注新增：{DescribeAnnotation(annotation)}，共 {_annotations.Count}");
+        Flash(annotation switch
+        {
+            ShapeAnnotation { Kind: PinShapeKind.Ellipse } => "已添加椭圆标注",
+            ShapeAnnotation => "已添加矩形标注",
+            TextAnnotation => "已添加文字标注",
+            ArrowAnnotation => "已添加箭头标注",
+            _ => "已添加标注",
+        });
+    }
+
+    private void UndoAnnotation()
+    {
+        if (_drawingShape || _drawingArrow)
+        {
+            Flash("正在绘制，松开后再撤销");
+            return;
+        }
+
+        if (_textEditor is not null)
+        {
+            Flash("请先完成文字输入");
+            return;
+        }
+
+        var removed = _annotations.Undo();
+        if (removed is null)
+        {
+            Flash("没有可撤销的标注");
+            return;
+        }
+
+        OnAnnotationsChanged();
+        AppLog.Write($"贴图标注撤销：{DescribeAnnotation(removed)}，剩余 {_annotations.Count}");
+        Flash(removed switch
+        {
+            TextAnnotation => "已撤销文字标注",
+            ArrowAnnotation => "已撤销箭头标注",
+            _ => "已撤销形状标注",
+        });
+    }
+
+    private void OnUndoClick(object sender, RoutedEventArgs e) => UndoAnnotation();
+
+    /// <summary>Ctrl+Z 命令：只在没有文字输入、没有正在拖框且有可撤销标注时可用。</summary>
+    private void OnUndoCommandCanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = _textEditor is null && !_drawingShape && !_drawingArrow && _annotations.CanUndo;
+        e.Handled = true;
+    }
+
+    private void OnUndoCommandExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        UndoAnnotation();
+        e.Handled = true;
+    }
+
+    private void OnAnnotationsChanged()
+    {
+        _annotationVersion++;
+        AnnotationLayer.SetAnnotations(_annotations.Items);
+
+        // 标注改变了合成图，OCR 版面（以及当前高亮）随即失效
+        if (_selectMode) ExitTextSelect();
+        _layout = null;
+        _selection = default;
+        HighlightLayer.Children.Clear();
+
+        AnnotationsChanged?.Invoke();
+        UpdateEditToolUi();
+        UpdateInfo();
+    }
+
+    private static string DescribeAnnotation(PinAnnotation annotation) => annotation switch
+    {
+        ShapeAnnotation shape => shape.Kind == PinShapeKind.Ellipse ? "椭圆标注" : "矩形标注",
+        ArrowAnnotation => "箭头标注",
+        TextAnnotation text => $"文字标注「{Truncate(text.Text, 12)}」",
+        _ => "标注",
+    };
+
+    private static string Truncate(string text, int maxLength)
+        => text.Length <= maxLength ? text : text[..maxLength] + "…";
+
+    // ---- 文字标注编辑 ----
+
+    private void BeginTextEditing(Point displayPoint)
+    {
+        if (_textEditor is not null) return;
+
+        var displayWidth = ShotImage.ActualWidth;
+        var displayHeight = ShotImage.ActualHeight;
+        if (displayWidth <= 0 || displayHeight <= 0) return;
+
+        var scaleX = displayWidth / _source.PixelWidth;
+        var scaleY = displayHeight / _source.PixelHeight;
+        if (scaleX <= 0 || scaleY <= 0) return;
+
+        var left = Math.Clamp(displayPoint.X, 0, Math.Max(0, displayWidth - 1));
+        var top = Math.Clamp(displayPoint.Y, 0, Math.Max(0, displayHeight - 1));
+
+        var available = Math.Max(20, displayWidth - left - 4);
+        var width = Math.Min(240, available);
+        if (width < 80) left = Math.Max(0, displayWidth - width - 4);
+
+        var maxHeight = Math.Max(40, displayHeight - top - 4);
+        var editorWidth = Math.Max(10, width - 6);
+        var lightText = IsLightColor(_textColor);
+
+        var editor = new TextBox
+        {
+            Width = editorWidth,
+            MinHeight = 24,
+            MaxHeight = Math.Max(24, maxHeight - 8),
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalContentAlignment = VerticalAlignment.Top,
+            FontFamily = PinAnnotationRenderer.AnnotationFontFamily,
+            FontSize = Math.Clamp(_textFontSize * scaleY, 6, 200),
+            Foreground = CreateBrush(_textColor),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(3, 2, 3, 2),
+            CaretBrush = lightText ? Brushes.White : Brushes.Black,
+            SelectionBrush = TextEditorSelectionBrush,
+            SpellCheck = { IsEnabled = false },
+        };
+
+        var host = new Border
+        {
+            Width = width,
+            MaxHeight = maxHeight,
+            Background = CreateFrozenBrush(lightText
+                ? Color.FromArgb(0xE6, 0x1B, 0x1B, 0x2F)
+                : Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
+            BorderBrush = CreateFrozenBrush(Color.FromArgb(0xCC, 0x3B, 0x82, 0xF6)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(2),
+            Child = editor,
+        };
+
+        _textEditorHost = host;
+        _textEditor = editor;
+        _textOriginImage = new Point((left + 6) / scaleX, (top + 5) / scaleY);
+        _textMaxWidthImage = Math.Max(1, Math.Max(1, editorWidth - 6) / scaleX);
+
+        TextEditorLayer.Children.Add(host);
+        Canvas.SetLeft(host, left);
+        Canvas.SetTop(host, top);
+
+        editor.PreviewKeyDown += OnTextEditorPreviewKeyDown;
+        editor.LostKeyboardFocus += OnTextEditorLostKeyboardFocus;
+
+        UpdateEditToolUi();
+        UpdateInfo();
+        Flash("输入文字：Ctrl+Enter 完成，Esc 取消");
+
+        // 贴图窗默认 WS_EX_NOACTIVATE，必须先允许激活才能接收键盘
+        _foregroundBeforeEditing = Native.GetForegroundWindow();
+        TopmostKeeper.SetNoActivate(this, false);
+        Activate();
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (!ReferenceEquals(_textEditor, editor)) return;
+            editor.Focus();
+            Keyboard.Focus(editor);
+        }));
+    }
+
+    private void OnTextEditorPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelTextEditing();
+            return;
+        }
+
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            e.Handled = true;
+            CommitTextEditing(restoreFocus: true);
+        }
+    }
+
+    private void OnTextEditorLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (_textEditor is null || _endingTextEditing) return;
+
+        // 等焦点真正落定后再决定；若焦点只是转到工具条按钮，同样按提交处理
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (_textEditor is not null && !_endingTextEditing)
+                CommitTextEditing(restoreFocus: false);
+        }));
+    }
+
+    private void CommitTextEditing(bool restoreFocus, bool exitEditTool = true)
+    {
+        var editor = _textEditor;
+        if (editor is null) return;
+
+        var text = editor.Text;
+        var origin = _textOriginImage;
+        var maxWidth = _textMaxWidthImage;
+
+        EndTextEditing(restoreFocus);
+
+        // 单次操作：提交一段文字后立即退出文字工具，恢复拖动/双击关闭。
+        // 由 ExitEditTool/EnterEditTool 内部调用时传 false，避免递归。
+        if (exitEditTool) ExitEditTool();
+
+        var annotation = PinAnnotationFactory.CreateText(
+            origin.X,
+            origin.Y,
+            text,
+            _textColor,
+            _textFontSize,
+            maxWidth,
+            _source.PixelWidth,
+            _source.PixelHeight);
+
+        if (annotation is null)
+        {
+            if (!string.IsNullOrWhiteSpace(text)) Flash("文字标注无效");
+            return;
+        }
+
+        AddAnnotation(annotation);
+    }
+
+    private void CancelTextEditing()
+    {
+        if (_textEditor is null) return;
+
+        EndTextEditing(restoreFocus: true);
+        ExitEditTool();
+        Flash("已取消文字输入");
+    }
+
+    private void EndTextEditing(bool restoreFocus)
+    {
+        if (_textEditor is null || _endingTextEditing) return;
+
+        var editor = _textEditor;
+        var host = _textEditorHost;
+        var previousForeground = _foregroundBeforeEditing;
+
+        _endingTextEditing = true;
+        try
+        {
+            _textEditor = null;
+            _textEditorHost = null;
+            _foregroundBeforeEditing = IntPtr.Zero;
+
+            editor.PreviewKeyDown -= OnTextEditorPreviewKeyDown;
+            editor.LostKeyboardFocus -= OnTextEditorLostKeyboardFocus;
+            if (host is not null) TextEditorLayer.Children.Remove(host);
+
+            // 恢复贴图的“不抢焦点”风格
+            TopmostKeeper.SetNoActivate(this, true);
+
+            UpdateEditToolUi();
+            UpdateInfo();
+
+            if (restoreFocus && previousForeground != IntPtr.Zero && Native.IsWindow(previousForeground))
+            {
+                var handle = new WindowInteropHelper(this).Handle;
+                if (handle != IntPtr.Zero && previousForeground != handle)
+                    Native.SetForegroundWindow(previousForeground);
+            }
+        }
+        finally
+        {
+            _endingTextEditing = false;
+        }
+    }
+
+    private static bool IsLightColor(AnnotationColor color)
+    {
+        var luminance = (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255.0;
+        return luminance > 0.55;
+    }
+
+    private static SolidColorBrush CreateBrush(AnnotationColor color)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(color.A, color.R, color.G, color.B));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static Brush CreateFrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
     // ---- 工具条 ----
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        if (ClipboardSupport.CopyImage(_source)) Flash("已复制到剪贴板");
+        try
+        {
+            if (ClipboardSupport.CopyImage(ComposeImage())) Flash("已复制到剪贴板");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"合成带标注图片失败（复制）: {ex}");
+            Flash("无法生成带标注的图片");
+        }
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e) => SaveRequested?.Invoke(this);
@@ -759,6 +1706,9 @@ public partial class PinWindow : Window
     {
         base.OnKeyDown(e);
 
+        // 文字编辑时键盘归 TextBox：Ctrl+Z 撤销输入、Esc 取消、Ctrl+Enter 提交都在 PreviewKeyDown 处理
+        if (_textEditor is not null) return;
+
         if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0)
         {
             switch (e.Key)
@@ -783,6 +1733,10 @@ public partial class PinWindow : Window
                     ToggleTextSelect();
                     e.Handled = true;
                     return;
+                case Key.Z:
+                    UndoAnnotation();
+                    e.Handled = true;
+                    return;
                 case Key.Delete:
                     DeleteRequested?.Invoke(this);
                     e.Handled = true;
@@ -792,6 +1746,14 @@ public partial class PinWindow : Window
                     e.Handled = true;
                     return;
             }
+        }
+
+        // 编辑工具启用时：Esc 先退出工具，而不是关掉贴图
+        if (_editTool != PinEditTool.None && e.Key == Key.Escape)
+        {
+            ExitEditTool();
+            e.Handled = true;
+            return;
         }
 
         // 选择模式下：Esc 退出模式（而不是关掉贴图），Ctrl+A 全选，Ctrl+C 复制选区
@@ -831,10 +1793,13 @@ public partial class PinWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        if (_textEditor is not null) EndTextEditing(restoreFocus: false);
+
         IsClosed = true;
         _topmostTimer.Stop();
         _flashTimer?.Stop();
         if (Mouse.Captured == this) Mouse.Capture(null);
+        TextEditorLayer.Children.Clear();
         base.OnClosed(e);
         _onClosed?.Invoke(this);
     }

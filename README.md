@@ -40,7 +40,7 @@ OneBox.exe（宿主：托盘 + 工具箱 + 热键/托盘/设置/日志/崩溃重
 | --- | --- | --- | --- |
 | 置顶文本 | `textpin` | 常驻置顶的纯文本框，随手记与暂存纯文本；一键抓取选中文字置顶、复制/粘贴回目标软件，**不监听剪贴板** | [README](src/OneBox.Plugins.TextPin/README.md) |
 | 快速便签 | `quicknote` | 热键呼出一个置顶便签窗，内容自动保存；同时是编写新小工具的模板 | [README](src/OneBox.Plugins.QuickNote/README.md) |
-| 截图 | `screenshot` | 区域/全屏/滚动截长图，贴图置顶不被遮挡、贴回原位；另存为保存，双引擎离线文字识别与划选取字 | [README](src/OneBox.Plugins.Screenshot/README.md) |
+| 截图 | `screenshot` | 区域/全屏/滚动截长图，贴图置顶不被遮挡、贴回原位；贴图框选/箭头/文字标注与撤销；另存为保存，双引擎离线文字识别与划选取字 | [README](src/OneBox.Plugins.Screenshot/README.md) |
 
 > 想自己写一个小工具，从[快速便签](src/OneBox.Plugins.QuickNote/README.md)照搬即可，接口见下面的[写一个小工具](#写一个小工具)。
 

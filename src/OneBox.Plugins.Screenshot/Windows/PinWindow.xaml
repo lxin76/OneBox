@@ -1,12 +1,23 @@
 <Window x:Class="OneBox.Plugins.Screenshot.Windows.PinWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OneBox.Plugins.Screenshot.Controls"
         Title="贴图"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" ResizeMode="NoResize"
         WindowStartupLocation="Manual"
         UseLayoutRounding="True"
-        SnapsToDevicePixels="True">
+        SnapsToDevicePixels="True"
+        Focusable="True">
+    <Window.InputBindings>
+        <!-- 撤销上一步贴图标注；文字输入框有焦点时由 TextBox 自己处理撤销 -->
+        <KeyBinding Key="Z" Modifiers="Control" Command="ApplicationCommands.Undo"/>
+    </Window.InputBindings>
+    <Window.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Undo"
+                        Executed="OnUndoCommandExecuted"
+                        CanExecute="OnUndoCommandCanExecute"/>
+    </Window.CommandBindings>
     <Window.Resources>
         <!-- 工具条按钮：深色底、悬停高亮 -->
         <Style x:Key="ToolButton" TargetType="Button">
@@ -36,12 +47,60 @@
             </Setter>
         </Style>
 
+        <!-- 编辑栏里的步进按钮：比主工具按钮更窄 -->
+        <Style x:Key="StepButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+
+        <!-- 预设颜色色块 -->
+        <Style x:Key="SwatchButton" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="BorderBrush" Value="#66FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FFFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ToolSeparator" TargetType="Rectangle">
             <Setter Property="Width" Value="1"/>
             <Setter Property="Height" Value="16"/>
             <Setter Property="Fill" Value="#3DFFFFFF"/>
             <Setter Property="Margin" Value="4,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ToolLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#8A90A6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="2,0,4,0"/>
+        </Style>
+
+        <Style x:Key="ToolValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E6E8F0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Width" Value="28"/>
         </Style>
     </Window.Resources>
 
@@ -53,15 +112,23 @@
                 <RowDefinition Height="*"/>
                 <!-- 行1：外部工具区（贴图下方专属横条，不占贴图区域） -->
                 <RowDefinition Height="Auto"/>
+                <!-- 行2：编辑功能栏（框选/文字标注、撤销） -->
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0">
+            <Grid Grid.Row="0" ClipToBounds="True">
                 <!-- 图片本体 -->
                 <Image x:Name="ShotImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <!-- 标注层：只画，不拦截鼠标 -->
+                <controls:AnnotationView x:Name="AnnotationLayer" IsHitTestVisible="False"/>
 
                 <!-- 文字选择高亮层：矩形由 OcrLayout 按字符槽算出，与命中测试同源。
                      IsHitTestVisible=False 让鼠标事件照常冒泡到窗口级处理。 -->
                 <Canvas x:Name="HighlightLayer" IsHitTestVisible="False"/>
+
+                <!-- 文字标注编辑层：只有正在输入时才放一个 TextBox -->
+                <Canvas x:Name="TextEditorLayer" ClipToBounds="True"/>
 
                 <!-- 右下角缩放手柄 -->
                 <Border x:Name="ResizeHandle" Width="18" Height="18" HorizontalAlignment="Right"
@@ -85,11 +152,11 @@
                                 ToolTip="删除此截图：关闭预览；若已保存过文件，一并删除（Del）" Click="OnDeleteClick"/>
                         <Rectangle Style="{StaticResource ToolSeparator}"/>
                         <Button x:Name="CopyButton" Style="{StaticResource ToolButton}" Content="&#x1F4CB;"
-                                ToolTip="复制图片到剪贴板（Alt+C）" Click="OnCopyClick"/>
+                                ToolTip="复制图片到剪贴板（Alt+C，包含标注）" Click="OnCopyClick"/>
                         <Button x:Name="SaveButton" Style="{StaticResource ToolButton}" Content="&#x1F4BE;"
-                                ToolTip="保存到文件（Alt+S）" Click="OnSaveClick"/>
+                                ToolTip="保存到文件（Alt+S，包含标注）" Click="OnSaveClick"/>
                         <Button x:Name="OcrButton" Style="{StaticResource ToolButton}" Content="&#x1F524;"
-                                ToolTip="识别图中文字（Alt+O）" Click="OnOcrClick"/>
+                                ToolTip="识别图中文字（Alt+O，包含标注）" Click="OnOcrClick"/>
                         <Button x:Name="SelectTextButton" Style="{StaticResource ToolButton}" Content="&#x1F4DD;"
                                 ToolTip="选择文字：在图上拖动划选，松开即复制（Alt+X）" Click="OnToggleTextSelect"/>
                         <Rectangle Style="{StaticResource ToolSeparator}"/>
@@ -99,6 +166,64 @@
                                 ToolTip="用默认看图程序打开（Alt+Enter）" Click="OnOpenInViewerClick"/>
                     </StackPanel>
                 </DockPanel>
+            </Border>
+
+            <!-- 编辑功能栏：贴图下方第二行，不遮挡图片 -->
+            <Border Grid.Row="2" x:Name="EditToolbar" Background="#E6181828" Padding="8,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="编辑" Style="{StaticResource ToolLabel}" Margin="0,0,6,0"/>
+
+                    <Button x:Name="ShapeToolButton" Style="{StaticResource ToolButton}" Content="&#x25AD;"
+                            FontSize="15"
+                            ToolTip="选择工具：在图上拖动绘制一个矩形/椭圆边框（完成后自动退出，点击可取消）"
+                            Click="OnToggleShapeTool"/>
+                    <Button x:Name="ArrowToolButton" Style="{StaticResource ToolButton}" Content="&#x2197;"
+                            FontSize="15"
+                            ToolTip="箭头：从起点拖到指向位置（完成后自动退出，点击可取消）"
+                            Click="OnToggleArrowTool"/>
+                    <Button x:Name="TextToolButton" Style="{StaticResource ToolButton}" Content="T"
+                            FontSize="13" FontWeight="Bold"
+                            ToolTip="文字标注：在图上点击输入一段说明文字（提交后自动退出，点击可取消）"
+                            Click="OnToggleTextTool"/>
+
+                    <Rectangle Style="{StaticResource ToolSeparator}"/>
+
+                    <StackPanel x:Name="ShapeEditGroup" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Text="形状" Style="{StaticResource ToolLabel}"/>
+                        <Button x:Name="RectangleShapeButton" Style="{StaticResource ToolButton}" Content="&#x25AD;"
+                                FontSize="14" ToolTip="矩形边框" Click="OnRectangleShapeClick"/>
+                        <Button x:Name="EllipseShapeButton" Style="{StaticResource ToolButton}" Content="&#x25EF;"
+                                FontSize="13" ToolTip="椭圆边框" Click="OnEllipseShapeClick"/>
+                        <Rectangle Style="{StaticResource ToolSeparator}"/>
+                    </StackPanel>
+
+                    <!-- 框选与箭头共用颜色/粗细设置 -->
+                    <StackPanel x:Name="StrokeEditGroup" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Text="颜色" Style="{StaticResource ToolLabel}"/>
+                        <StackPanel x:Name="ShapeColorPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
+                        <TextBlock Text="粗细" Style="{StaticResource ToolLabel}" Margin="6,0,2,0"/>
+                        <Button x:Name="ShapeThicknessDown" Style="{StaticResource StepButton}" Content="&#x2212;"
+                                ToolTip="线条更细" Click="OnShapeThicknessDown"/>
+                        <TextBlock x:Name="ShapeThicknessText" Style="{StaticResource ToolValue}" Text="2"/>
+                        <Button x:Name="ShapeThicknessUp" Style="{StaticResource StepButton}" Content="+"
+                                ToolTip="线条更粗" Click="OnShapeThicknessUp"/>
+                    </StackPanel>
+
+                    <StackPanel x:Name="TextEditGroup" Orientation="Horizontal" Visibility="Collapsed">
+                        <TextBlock Text="颜色" Style="{StaticResource ToolLabel}"/>
+                        <StackPanel x:Name="TextColorPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
+                        <TextBlock Text="字号" Style="{StaticResource ToolLabel}" Margin="6,0,2,0"/>
+                        <Button x:Name="TextSizeDown" Style="{StaticResource StepButton}" Content="&#x2212;"
+                                ToolTip="文字更小" Click="OnTextSizeDown"/>
+                        <TextBlock x:Name="TextSizeText" Style="{StaticResource ToolValue}" Text="20"/>
+                        <Button x:Name="TextSizeUp" Style="{StaticResource StepButton}" Content="+"
+                                ToolTip="文字更大" Click="OnTextSizeUp"/>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource ToolSeparator}"/>
+                    <Button x:Name="UndoButton" Style="{StaticResource ToolButton}" Content="&#x21B6;"
+                            ToolTip="撤销上一步标注（Ctrl+Z / Alt+Z）" Click="OnUndoClick"/>
+                </StackPanel>
             </Border>
         </Grid>
     </Border>

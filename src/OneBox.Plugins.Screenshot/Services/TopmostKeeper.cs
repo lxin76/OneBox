@@ -94,13 +94,18 @@ public static class TopmostKeeper
     }
 
     /// <summary>设置“不显示在任务栏、点击不激活”的贴图风格。</summary>
-    public static void ApplyPasteStyle(Window window, bool topmost)
+    /// <param name="noActivate">
+    /// 是否保持 WS_EX_NOACTIVATE。文字标注输入期间需要临时允许激活，
+    /// 此时传 false，否则置顶状态变化会把键盘焦点重新收走。
+    /// </param>
+    public static void ApplyPasteStyle(Window window, bool topmost, bool noActivate = true)
     {
         var hwnd = HandleOf(window);
         if (hwnd == IntPtr.Zero) return;
 
         var style = GetWindowLong(hwnd, GWL_EXSTYLE);
-        style |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        style |= WS_EX_TOOLWINDOW;
+        style = noActivate ? style | WS_EX_NOACTIVATE : style & ~WS_EX_NOACTIVATE;
         style = topmost ? style | WS_EX_TOPMOST : style & ~WS_EX_TOPMOST;
         SetWindowLong(hwnd, GWL_EXSTYLE, style);
 

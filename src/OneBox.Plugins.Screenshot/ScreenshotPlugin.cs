@@ -575,22 +575,44 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
         pin.SaveRequested += p => _ = SavePinAsync(p);
         pin.DeleteRequested += p => DeletePin(p);
-        pin.OcrRequested += p => _ = RecognizeAsync(p.Source, "贴图识别", p);
+        pin.OcrRequested += p => _ = RecognizePinAsync(p);
 
         // 划选文字：OCR 只做一次并缓存在贴图窗上，之后拖动选择是纯几何计算。
         // 缓存挂在 PinWindow 自己身上，贴图关闭即随之释放。
+        // 标注会改变合成图，因此标注一增一减就清空版面缓存。
         var cachedLayout = (OcrLayout?)null;
+        pin.AnnotationsChanged += () => cachedLayout = null;
         pin.LayoutProvider = async window =>
         {
             if (cachedLayout is not null) return cachedLayout;
 
+            var version = window.AnnotationVersion;
+            BitmapSource image;
+            try
+            {
+                image = window.ComposeImage();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write($"贴图划选合成带标注图片失败: {ex}");
+                await _context.LogWarningAsync("无法生成带标注的图片，暂不能划选取字。").ConfigureAwait(true);
+                return null;
+            }
+
             var outcome = await OcrService.RecognizeAsync(
-                window.Source, Settings.OcrLanguage, Settings.OcrStripCjkSpaces, Settings.OcrEnhanceImage)
+                image, Settings.OcrLanguage, Settings.OcrStripCjkSpaces, Settings.OcrEnhanceImage)
                 .ConfigureAwait(true);
             if (!outcome.Success)
             {
                 AppLog.Write($"贴图划选识别失败: {outcome.Error}");
                 await _context.LogWarningAsync(outcome.Error ?? "识别失败。").ConfigureAwait(true);
+                return null;
+            }
+
+            // 识别期间用户又加了/撤销了标注：版面对应的已经不是当前合成图，丢弃。
+            if (version != window.AnnotationVersion)
+            {
+                cachedLayout = null;
                 return null;
             }
 
@@ -636,7 +658,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
                 return;
             }
 
-            ImageCodec.SaveTo(pin.Source, path, Settings.Format, Settings.JpegQuality);
+            ImageCodec.SaveTo(pin.ComposeImage(), path, Settings.Format, Settings.JpegQuality);
             pin.SavedFilePath = path;
             AppLog.Write($"已保存：{path}");
 
@@ -707,6 +729,24 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         // 剪贴板位图绑定在当前 UI 线程上，而识别过程会切到线程池，
         // 先拷一份冻结副本，否则 OCR 里访问像素会抛跨线程异常。
         await RecognizeAsync(ImageCodec.Snapshot(image), "剪贴板图片识别").ConfigureAwait(false);
+    }
+
+    /// <summary>识别贴图上的文字；先合成标注，合成失败时给出明确提示而不是静默识别原图。</summary>
+    private async Task RecognizePinAsync(PinWindow pin)
+    {
+        BitmapSource image;
+        try
+        {
+            image = pin.ComposeImage();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"贴图识别合成带标注图片失败: {ex}");
+            await _context.LogErrorAsync("无法生成带标注的图片，识别已取消。").ConfigureAwait(true);
+            return;
+        }
+
+        await RecognizeAsync(image, "贴图识别", pin).ConfigureAwait(true);
     }
 
     /// <summary>
