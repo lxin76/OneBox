@@ -1,243 +1,173 @@
 namespace OneBox.Plugins.Screenshot.Core;
 
-/// <summary>一次追加帧的结果。</summary>
+/// <summary>一次追加帧的结果；旧成员顺序保持不变。</summary>
 public enum ScrollAppendStatus
 {
-    /// <summary>第一帧，整幅纳入。</summary>
     First,
-    /// <summary>找到了重叠区，只追加了新出现的部分。</summary>
     Appended,
-    /// <summary>画面与已累积内容完全一致：通常已经滚到底。</summary>
     NoChange,
-    /// <summary>找不到重叠区：滚动距离超出单帧高度，或页面内容变化太剧烈。</summary>
     NoOverlap,
-    /// <summary>已达到高度上限，停止拼接。</summary>
     LimitReached,
+    /// <summary>存在多个可信位移，不能安全拼接。</summary>
+    Ambiguous,
+    /// <summary>缺少可确认配准的纹理，不能把白底相似当作重叠。</summary>
+    InsufficientTexture,
+    /// <summary>检测到不随内容滚动的头尾，请重新裁选以排除固定区域。</summary>
+    FixedContent,
+    /// <summary>继续接收会超出像素内存预算；已接受内容仍可导出。</summary>
+    MemoryLimitReached,
 }
 
-/// <summary>追加结果。</summary>
 public readonly record struct ScrollAppendResult(
     ScrollAppendStatus Status, int AppendedRows, int OverlapRows)
 {
-    /// <summary>是否应继续捕获下一帧。</summary>
     public bool ShouldContinue => Status == ScrollAppendStatus.First || Status == ScrollAppendStatus.Appended;
 }
 
 /// <summary>
-/// 滚动截长图的拼接器：逐帧喂入屏幕像素，靠“锚点行块”在下一帧里定位滚动距离，
-/// 只把新出现的行追加到结果里。
-///
-/// 匹配用的是带容差的行剖面而非量化签名：浏览器/应用的平滑滚动会产生亚像素位移与
-/// 重绘抖动，量化后的精确比对会让每一行都失配（实测匹配率常年为 0）。
-/// 纯逻辑（不依赖 WPF），便于单元测试。
+/// 向下滚动截图拼接器。配准仅针对相邻已接受原帧，组装追加确认重叠区之后的原始 BGRA。
+/// 两帧确认的极薄底边框由新帧对应原始重叠行覆盖；不修改原帧基准、不缩放、不改变行数。
+/// 不根据已累积图、相似统计或“内容新颖度”推测位移。失败不会推进原帧基准或已接受帧计数。
+/// 固定头尾、横向滚动、缩放、无法区分的重复纹理不受支持，应重新裁选/捕获。
 /// </summary>
 public sealed class ScrollStitcher
 {
-    /// <summary>行相似度容差：平均亮度差的均值低于该值即视为同一行。</summary>
-    private const int SimilarityTolerance = 12;
-
-    /// <summary>锚点窗口中允许有多大比例的行不匹配（滚动重绘噪声）。</summary>
-    private const double MatchRatio = 0.85;
-
+    public const long DefaultMemoryBudgetBytes = 256L * 1024 * 1024;
     private readonly int _width;
     private readonly int _heightLimit;
     private readonly int _minMatchRows;
-    private readonly List<byte[]> _rows = [];
-    private readonly List<RowProfile> _profiles = [];
+    private readonly long _memoryBudgetBytes;
+    private readonly List<byte[]> _chunks = [];
+    private long _resultBytes;
+    private byte[]? _previous;
+    private int _previousHeight;
+
+    /// <summary>兼容原构造函数，使用 256 MiB 内存预算。</summary>
+    public ScrollStitcher(int width, int heightLimit, int minMatchRows = 24)
+        : this(width, heightLimit, minMatchRows, DefaultMemoryBudgetBytes) { }
 
     /// <summary>
-    /// 构造拼接器。
+    /// 显式设置内存预算。预算涵盖持有结果、一次导出、前后原帧及配准特征和保守工作余量；
+    /// 不包含调用者持有的输入与已返回的导出数组。超限在任何内容/帧基准变更前拒绝。
     /// </summary>
-    /// <param name="width">画面宽度（像素）。</param>
-    /// <param name="heightLimit">结果高度上限，超过即停止。</param>
-    /// <param name="minMatchRows">锚点行数：用于在下一帧中定位滚动距离的最小匹配块高度。</param>
-    public ScrollStitcher(int width, int heightLimit, int minMatchRows = 24)
+    public ScrollStitcher(int width, int heightLimit, int minMatchRows, long memoryBudgetBytes)
     {
-        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        if (width <= 0 || width > int.MaxValue / 4) throw new ArgumentOutOfRangeException(nameof(width));
+        if (memoryBudgetBytes <= 0) throw new ArgumentOutOfRangeException(nameof(memoryBudgetBytes));
         _width = width;
         _heightLimit = Math.Max(heightLimit, 1);
-        _minMatchRows = Math.Max(minMatchRows, 4);
+        _minMatchRows = Math.Max(minMatchRows, 8);
+        _memoryBudgetBytes = memoryBudgetBytes;
     }
 
-    /// <summary>当前累积高度（行数）。</summary>
-    public int TotalHeight => _rows.Count;
-
-    /// <summary>已接受的帧数。</summary>
+    public int TotalHeight { get; private set; }
     public int FrameCount { get; private set; }
-
-    /// <summary>每次滚动实际移动的行数（用于给用户显示进度）。</summary>
+    /// <summary>上次实际追加的行数；失败/无变化时为零。</summary>
     public int LastScrollDelta { get; private set; }
-
-    /// <summary>最近一次锚点匹配命中的行数（诊断用）。</summary>
     public int LastMatchedRows { get; private set; }
-
-    /// <summary>最近一次锚点匹配要求的命中行数（诊断用）。</summary>
     public int LastRequiredRows { get; private set; }
-
-    /// <summary>最近一次锚点匹配的最佳起始位置（-1 表示未命中，诊断用）。</summary>
+    /// <summary>确认配准的新帧顶部在累积图中的位置，未确认时为 -1。</summary>
     public int LastBestPosition { get; private set; } = -1;
+    /// <summary>最近一次 Add 的纯标量诊断；首次 Add 前为 null。</summary>
+    public ScrollMatchDiagnostics? LastDiagnostics { get; private set; }
+    public int Stride => _width * 4;
 
-    /// <summary>
-    /// 追加一帧。
-    /// </summary>
-    /// <param name="pixels">BGRA 像素数据，长度至少为 height * bytesPerRow。</param>
-    /// <param name="height">帧高度（行数）。</param>
-    /// <param name="bytesPerRow">每行字节数（BGRA 时为 width * 4）。</param>
     public ScrollAppendResult Add(byte[] pixels, int height, int bytesPerRow)
     {
-        if (height <= 0 || bytesPerRow < _width * 4)
-            return new ScrollAppendResult(ScrollAppendStatus.NoOverlap, 0, 0);
-        if (_rows.Count >= _heightLimit)
-            return new ScrollAppendResult(ScrollAppendStatus.LimitReached, 0, 0);
-
-        var profiles = RowProfiles.Compute(pixels, _width, height, bytesPerRow);
-        if (profiles.Length == 0)
-            return new ScrollAppendResult(ScrollAppendStatus.NoOverlap, 0, 0);
-
-        FrameCount++;
-
-        // 第一帧：整幅纳入
-        if (_rows.Count == 0)
+        LastDiagnostics = new ScrollMatchDiagnostics { Stage = "Input", Status = ScrollAppendStatus.NoOverlap.ToString() };
+        LastScrollDelta = LastMatchedRows = LastRequiredRows = 0;
+        LastBestPosition = -1;
+        if (pixels is null || height <= 0 || bytesPerRow < Stride
+            || (long)height * bytesPerRow > pixels.LongLength)
+            return new(ScrollAppendStatus.NoOverlap, 0, 0);
+        if (TotalHeight >= _heightLimit)
         {
-            var take = Math.Min(height, _heightLimit);
-            AppendRows(pixels, bytesPerRow, 0, take, profiles);
-            LastScrollDelta = 0;
-            LastBestPosition = -1;
-            LastMatchedRows = 0;
-            LastRequiredRows = 0;
-            return new ScrollAppendResult(ScrollAppendStatus.First, take, 0);
+            LastDiagnostics = LastDiagnostics with { Stage = "HeightLimit", Status = ScrollAppendStatus.LimitReached.ToString() };
+            return new(ScrollAppendStatus.LimitReached, 0, 0);
         }
 
-        // 锚点 = 已累积内容的最后 minMatchRows 行
-        var anchorSize = Math.Min(_minMatchRows, _rows.Count);
-        var anchorStart = _rows.Count - anchorSize;
-
-        // 整帧都是纯色（抓取失败、页面全白）时不可能带来新内容，
-        // 直接判为“无变化”而不是尝试匹配一个没有区分度的锚点。
-        if (!RowProfiles.HasVariance(profiles, 0, profiles.Length))
+        var frameBytes = (long)Stride * height;
+        // 预留两个特征数组和工作区。所有乘法先提升为 long，拒绝不可导出的数组。
+        var workspace = (long)(height + (long)_previousHeight) * (Math.Min(_width, 96) * 2L + _width) + 16384;
+        if (frameBytes > int.MaxValue || !Fits(_resultBytes, frameBytes, workspace))
         {
-            LastBestPosition = -1;
-            LastMatchedRows = 0;
-            LastRequiredRows = 0;
-            return new ScrollAppendResult(ScrollAppendStatus.NoChange, 0, height);
+            LastDiagnostics = LastDiagnostics with { Stage = "MemoryBudget", Status = ScrollAppendStatus.MemoryLimitReached.ToString() };
+            return new(ScrollAppendStatus.MemoryLimitReached, 0, 0);
         }
+        var frame = new byte[(int)frameBytes];
+        for (var y = 0; y < height; y++)
+            Buffer.BlockCopy(pixels, y * bytesPerRow, frame, y * Stride, Stride);
 
-        // 锚点本身太“平”（大段纯色）时匹配结果不可靠，宁可停下也不拼错
-        if (!RowProfiles.HasVariance(_profiles.ToArray(), anchorStart, anchorSize))
+        var overlap = 0;
+        var border = 0;
+        if (_previous is not null)
         {
-            LastBestPosition = -1;
-            LastMatchedRows = 0;
-            LastRequiredRows = 0;
-            return new ScrollAppendResult(ScrollAppendStatus.NoChange, 0, height);
-        }
-
-        if (!TryFindAnchor(profiles, anchorSize, anchorStart, out var position, out _))
-            return new ScrollAppendResult(ScrollAppendStatus.NoOverlap, 0, 0);
-
-        // 帧内位置 position 对应当前累积高度的 anchorStart：
-        // 于是帧中已存在的行数 = position + anchorSize
-        var overlap = position + anchorSize;
-        if (overlap >= height)
-        {
-            // 整帧都是已有内容 → 没有滚动
-            LastScrollDelta = 0;
-            return new ScrollAppendResult(ScrollAppendStatus.NoChange, 0, height);
+            var match = ScrollFrameRegistration.Register(_previous, _previousHeight, frame,
+                height, _width, _minMatchRows);
+            LastDiagnostics = match.Diagnostics;
+            if (match.Status != ScrollAppendStatus.Appended)
+                return new(match.Status, 0, match.Overlap);
+            overlap = match.Overlap;
+            LastMatchedRows = match.MatchedRows;
+            border = match.BottomBorderRows;
+            LastRequiredRows = overlap - border;
+            LastBestPosition = TotalHeight - overlap;
         }
 
         var newRows = height - overlap;
-        var room = _heightLimit - _rows.Count;
-        var taken = Math.Min(newRows, room);
-        AppendRows(pixels, bytesPerRow, overlap, taken, profiles);
-
-        LastScrollDelta = newRows;
-        var status = taken < newRows ? ScrollAppendStatus.LimitReached : ScrollAppendStatus.Appended;
-        return new ScrollAppendResult(status, taken, overlap);
-
-        // 在候选帧里找锚点：用带容差的行比较，允许少量行因重绘而不一致。
-        // 页面里普遍存在重复行（空白行、表格边框），因此不能只看“命中行数”：
-        // 优先选总距离最小的位置，平局时取更靠后（滚动量更小）的位置——
-        // 这样宁可多留重叠，也不会把没见过的内容当成重复而跳过去。
-        bool TryFindAnchor(RowProfile[] frameProfiles, int size, int anchorFrom, out int found, out int matchedRows)
+        var take = Math.Min(newRows, _heightLimit - TotalHeight);
+        var nextBytes = _resultBytes + (long)take * Stride;
+        if (nextBytes > int.MaxValue || !Fits(nextBytes, frameBytes, workspace))
         {
-            found = -1;
-            matchedRows = 0;
-
-            var maxStart = frameProfiles.Length - size;
-            if (maxStart < 0)
-            {
-                LastRequiredRows = 0;
-                LastBestPosition = -1;
-                return false;
-            }
-
-            var required = (int)Math.Ceiling(size * MatchRatio);
-            LastRequiredRows = required;
-
-            var bestMatched = -1;
-            var bestDistance = long.MaxValue;
-            var bestStart = -1;
-
-            for (int start = 0; start <= maxStart; start++)
-            {
-                var matches = 0;
-                long totalDistance = 0;
-                for (int i = 0; i < size; i++)
-                {
-                    var distance = RowProfiles.Distance(frameProfiles[start + i], _profiles[anchorFrom + i]);
-                    totalDistance += distance;
-                    if (distance <= SimilarityTolerance) matches++;
-                }
-
-                if (matches < required) continue;
-
-                // 命中行数更多者胜出；相同则比总距离；再相同则取更靠后的位置
-                var better = matches > bestMatched
-                             || (matches == bestMatched && totalDistance < bestDistance)
-                             || (matches == bestMatched && totalDistance == bestDistance && start > bestStart);
-
-                if (better)
-                {
-                    bestMatched = matches;
-                    bestDistance = totalDistance;
-                    bestStart = start;
-                }
-            }
-
-            LastBestPosition = bestStart;
-            LastMatchedRows = bestMatched < 0 ? 0 : bestMatched;
-            found = bestStart;
-            matchedRows = LastMatchedRows;
-            return found >= 0;
+            LastDiagnostics = (LastDiagnostics ?? new ScrollMatchDiagnostics()) with
+                { Stage = "MemoryBudget", Status = ScrollAppendStatus.MemoryLimitReached.ToString(), OverlapRows = overlap };
+            return new(ScrollAppendStatus.MemoryLimitReached, 0, overlap);
         }
+        var chunk = frame.AsSpan(overlap * Stride, take * Stride).ToArray();
+        var first = _previous is null;
+        _chunks.EnsureCapacity(_chunks.Count + 1); // Allocate before mutating any accepted bytes.
+        // Repair only the confirmed old viewport border with corresponding raw rows from the new
+        // overlap. Do this after all rejection/allocation checks; failures never mutate the prefix.
+        var remaining = border * Stride;
+        var sourceEnd = overlap * Stride;
+        for (var i = _chunks.Count - 1; remaining > 0 && i >= 0; i--)
+        {
+            var target = _chunks[i];
+            var count = Math.Min(remaining, target.Length);
+            frame.AsSpan(sourceEnd - count, count).CopyTo(target.AsSpan(target.Length - count));
+            sourceEnd -= count;
+            remaining -= count;
+        }
+        _chunks.Add(chunk);
+        _resultBytes = nextBytes;
+        TotalHeight += take;
+        FrameCount++;
+        _previous = frame;
+        _previousHeight = height;
+        LastScrollDelta = first ? 0 : take;
+        // 达到上限（包括第一帧）明确告知停止，而不是再捕获一帧才发现。
+        var status = TotalHeight >= _heightLimit ? ScrollAppendStatus.LimitReached
+            : first ? ScrollAppendStatus.First : ScrollAppendStatus.Appended;
+        LastDiagnostics = (LastDiagnostics ?? new ScrollMatchDiagnostics()) with
+            { Stage = first ? "First" : "Matched", Status = status.ToString(), OverlapRows = overlap };
+        return new(status, take, overlap);
     }
 
-    /// <summary>把累积的行拼成一块连续的 BGRA 缓冲。</summary>
+    private bool Fits(long resultBytes, long frameBytes, long workspace) =>
+        // resultBytes 的第二份是导出预留；旧基准在换帧成功前仍存在。
+        resultBytes * 2 + frameBytes + (_previous?.LongLength ?? 0) + workspace
+            + ((long)_chunks.Count + 1) * 64 <= _memoryBudgetBytes;
+
+    /// <summary>按原样导出紧凑 BGRA；不含输入行尾 padding。</summary>
     public byte[] BuildBgra()
     {
-        var stride = _width * 4;
-        var total = (long)stride * _rows.Count;
-        if (total > int.MaxValue) throw new InvalidOperationException("拼接结果过大，无法一次性导出。");
-
-        var buffer = new byte[(int)total];
-        for (int i = 0; i < _rows.Count; i++)
-            Buffer.BlockCopy(_rows[i], 0, buffer, i * stride, stride);
-        return buffer;
-    }
-
-    /// <summary>结果每行字节数。</summary>
-    public int Stride => _width * 4;
-
-    private void AppendRows(byte[] pixels, int bytesPerRow, int fromRow, int count, RowProfile[] profiles)
-    {
-        var stride = _width * 4;
-        for (int i = 0; i < count; i++)
+        var buffer = new byte[(int)_resultBytes];
+        var offset = 0;
+        foreach (var chunk in _chunks)
         {
-            var row = new byte[stride];
-            var sourceOffset = (fromRow + i) * bytesPerRow;
-            if (sourceOffset + stride <= pixels.Length)
-                Buffer.BlockCopy(pixels, sourceOffset, row, 0, stride);
-            _rows.Add(row);
-            _profiles.Add(profiles[fromRow + i]);
+            Buffer.BlockCopy(chunk, 0, buffer, offset, chunk.Length);
+            offset += chunk.Length;
         }
+        return buffer;
     }
 }

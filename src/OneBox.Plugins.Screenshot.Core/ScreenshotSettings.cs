@@ -42,7 +42,7 @@ public sealed class ScreenshotSettings
     /// <summary>滚动截长图的像素高度上限，达到后自动停止，避免内存失控。</summary>
     public int ScrollMaxHeight { get; set; } = 20000;
 
-    /// <summary>滚动截长图每次滚动的鼠标滚轮格数。</summary>
+    /// <summary>自适应滚动的格数上限；从一格起步，运行时安全限制为最多六格。保留旧配置键。</summary>
     public int ScrollWheelNotches { get; set; } = 3;
 
     /// <summary>文本识别语言（BCP-47，如 "zh-Hans-CN"）；为空时用系统首选语言。</summary>

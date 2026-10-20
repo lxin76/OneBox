@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OneBox 滚动截图离线人工夹具</title>
+<style>
+  * { box-sizing: border-box; }
+  html { background: white; scroll-behavior: auto; }
+  body { margin: 0; background: #fff; color: #141414; font: 16px/1.65 system-ui, sans-serif; }
+  .controls { margin: 20px 36px 24px 104px; padding: 16px; border: 1px solid #555; }
+  main { width: min(900px, calc(100% - 152px)); margin-left: 104px; padding: 0 0 80px; }
+  h1 { margin: 0 0 24px; }
+  section { padding: 24px 0; border-top: 2px solid #222; }
+  h2 { margin: 0 0 12px; }
+  p { margin: 12px 0; }
+  .number { font-weight: 700; font-family: ui-monospace, monospace; }
+  pre { margin: 20px 0; padding: 16px; background: #fff; border: 1px solid #333; white-space: pre-wrap; font: 14px/1.6 ui-monospace, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+  th, td { border: 1px solid #555; padding: 8px 12px; text-align: left; }
+  th { font-weight: 700; background: white; }
+  .end { border: 3px solid #222; padding: 24px; margin: 24px 0; font-size: 20px; font-weight: 700; }
+  .fixed { display: none; position: fixed; left: 0; right: 0; padding: 10px 24px; color: white; background: #222; z-index: 5; }
+  .top { top: 0; } .bottom { bottom: 0; }
+  body.fixed-enabled .fixed { display: block; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <label><input id="fixed-toggle" type="checkbox"> 开启固定头尾栏（默认关闭，仅用于边界测试）</label>
+  <p>选区仅包含下方正文：保留白底与左边距测试，但避开本控制框、固定头尾栏、浏览器界面及滚动条。缩放与窗口尺寸在一次采集中保持不变。</p>
+  <p>这是人工验收夹具，不会自动滚动、捕获、联网或记录任何数据。唯一段落号应连续；重复 JSON 与表格用于暴露误匹配。</p>
+</div>
+<div class="fixed top">固定头栏 — 不属于正文，不要纳入选区</div>
+<div class="fixed bottom">固定尾栏 — 不属于正文，不要纳入选区</div>
+<main id="content">
+<h1>滚动截图正文起点 — BEGIN 0000</h1>
+</main>
+<script>
+'use strict';
+const main = document.querySelector('#content');
+let paragraph = 0;
+for (let block = 1; block <= 48; block++) {
+  const section = document.createElement('section');
+  const heading = document.createElement('h2');
+  heading.textContent = '区段 ' + String(block).padStart(3, '0');
+  section.append(heading);
+  for (let item = 1; item <= 4; item++) {
+    paragraph++;
+    const p = document.createElement('p');
+    const id = document.createElement('span');
+    id.className = 'number';
+    id.textContent = 'P-' + String(paragraph).padStart(5, '0') + ' | ';
+    p.append(id, '独一编号正文。白色背景、较宽左边距与重复结构均需完整保留。区段 ' + block + '，本段校验码 ' + ((paragraph * 7919) % 104729) + '。请检查编号连续、不重复、不缺行，文字和边框不能被拼接接缝截断。');
+    section.append(p);
+  }
+  const pre = document.createElement('pre');
+  pre.textContent = JSON.stringify({ status: 'ok', items: [{ id: 1, name: 'repeat', enabled: true }, { id: 2, name: 'repeat', enabled: false }], metadata: { page: 'same-json-in-every-block', count: 2 } }, null, 2);
+  section.append(pre);
+  const table = document.createElement('table');
+  const head = document.createElement('thead');
+  const tr = document.createElement('tr');
+  for (const name of ['唯一行号', '类别', '重复值', '校验值']) { const th = document.createElement('th'); th.textContent = name; tr.append(th); }
+  head.append(tr); table.append(head);
+  const body = document.createElement('tbody');
+  for (let row = 1; row <= 6; row++) {
+    const tr = document.createElement('tr');
+    for (const value of ['T-' + String(block).padStart(3, '0') + '-' + row, '重复记录', 'same repeated value', String(block * 1009 + row * 37)]) {
+      const td = document.createElement('td'); td.textContent = value; tr.append(td);
+    }
+    body.append(tr);
+  }
+  table.append(body); section.append(table); main.append(section);
+}
+for (let index = 1; index <= 4; index++) {
+  const marker = document.createElement('p'); marker.className = 'end';
+  marker.textContent = 'END ' + index + '/4 — 最终正文标记 — P-00192 后无其他段落';
+  main.append(marker);
+}
+document.querySelector('#fixed-toggle').addEventListener('change', event => {
+  document.body.classList.toggle('fixed-enabled', event.target.checked);
+});
+</script>
+</body>
+</html>

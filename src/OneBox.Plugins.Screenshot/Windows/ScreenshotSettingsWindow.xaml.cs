@@ -51,7 +51,7 @@ public partial class ScreenshotSettingsWindow : Window
         PinCheck.IsChecked = _settings.PinTopmost;
 
         WheelBox.Text = _settings.ScrollWheelNotches.ToString();
-        WheelHint.Text = $"每格约等于一屏的 1/{Math.Max(1, _settings.ScrollWheelNotches)}";
+        WheelHint.Text = $"从一格起步，自动调整；运行上限 {Math.Clamp(_settings.ScrollWheelNotches, 1, 6)} 格";
         MaxHeightBox.Text = _settings.ScrollMaxHeight.ToString();
 
         LoadOcrLanguages();
@@ -196,16 +196,16 @@ public partial class ScreenshotSettingsWindow : Window
 
         if (int.TryParse(WheelBox.Text.Trim(), out var wheel))
         {
-            wheel = Math.Clamp(wheel, 1, 15);
+            wheel = Math.Clamp(wheel, 1, 30);
             if (wheel != _settings.ScrollWheelNotches) { _settings.ScrollWheelNotches = wheel; changed = true; }
             WheelBox.Text = wheel.ToString();
-            WheelHint.Text = $"每格约等于一屏的 1/{wheel}";
+            WheelHint.Text = $"从一格起步，自动调整；运行上限 {Math.Clamp(wheel, 1, 6)} 格";
         }
         else WheelBox.Text = _settings.ScrollWheelNotches.ToString();
 
         if (int.TryParse(MaxHeightBox.Text.Trim(), out var maxHeight))
         {
-            maxHeight = Math.Clamp(maxHeight, 1000, 100000);
+            maxHeight = Math.Clamp(maxHeight, 1000, 200000);
             if (maxHeight != _settings.ScrollMaxHeight) { _settings.ScrollMaxHeight = maxHeight; changed = true; }
             MaxHeightBox.Text = maxHeight.ToString();
         }

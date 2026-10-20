@@ -42,12 +42,12 @@
         <StackPanel>
             <TextBlock Text="滚动截长图" FontSize="13" FontWeight="SemiBold" Foreground="#F2F2F2"/>
             <TextBlock x:Name="StatusText" Foreground="#B9BFD0" FontSize="11" Margin="0,4,0,0"
-                       Text="正在滚动，请勿移动鼠标…" MaxWidth="300" TextWrapping="Wrap"/>
+                       Text="正在准备，请松开按键。Esc 取消；选区避开固定栏。" MaxWidth="300" TextWrapping="Wrap"/>
             <ProgressBar x:Name="Progress" Height="4" Margin="0,8,0,0" Width="260"
                          Minimum="0" Maximum="100" Value="0"
                          Background="#2E2E48" Foreground="#3B82F6" BorderThickness="0"/>
             <StackPanel Orientation="Horizontal" Margin="0,10,0,0" HorizontalAlignment="Right">
-                <Button x:Name="StopButton" Content="完成并保存" Click="OnStopClick"
+                <Button x:Name="StopButton" Content="完成并预览" Click="OnStopClick"
                         Style="{StaticResource LinkButton}"/>
                 <Button x:Name="CancelButton" Content="取消" Click="OnCancelClick" Margin="8,0,0,0"
                         Style="{StaticResource LinkButton}"/>

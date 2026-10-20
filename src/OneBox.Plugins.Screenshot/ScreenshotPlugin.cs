@@ -44,6 +44,10 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     /// <summary>同一时刻只允许一个截图流程（区域选择 / 滚动截图）。</summary>
     private bool _captureInProgress;
 
+    // 仅恢复本次截图前可见的窗口，不把用户原本隐藏的贴图重新显示。
+    private readonly List<PinWindow> _captureHiddenPins = [];
+    private ScreenshotSettingsWindow? _captureHiddenSettings;
+
     private bool _disposed;
 
     public ScreenshotPlugin(PluginContext context, Dispatcher dispatcher)
@@ -305,6 +309,10 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         }
 
         _captureInProgress = true;
+
+        // 整个流程（含用户拖选、滚动截长图）结束后才释放占用：
+        // 以前在“打开选择遮罩”后就立刻释放，滚动截图跑起来的这段时间仍可被再次触发，
+        // 第二次截图会插进来、连选区遮罩带控制条一起被截进长图。
         try
         {
             // 先把本插件自己的贴图与其他窗口藏起来，避免被截进画面
@@ -317,21 +325,22 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
                     break;
 
                 case CaptureMode.Region:
-                    CaptureRegion(enableScroll: false);
+                    await CaptureRegionAsync(enableScroll: false).ConfigureAwait(true);
                     break;
 
                 case CaptureMode.Scroll:
-                    CaptureRegion(enableScroll: true);
+                    await CaptureRegionAsync(enableScroll: true).ConfigureAwait(true);
                     break;
             }
         }
         catch (Exception ex)
         {
             AppLog.Write($"截图失败: {ex}");
-            await _context.LogErrorAsync($"截图失败：{ex.Message}").ConfigureAwait(false);
+            await _context.LogErrorAsync($"截图失败：{ex.Message}").ConfigureAwait(true);
         }
         finally
         {
+            RestoreOwnWindows();
             _captureInProgress = false;
         }
     }
@@ -339,8 +348,14 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     /// <summary>截图前隐藏本插件的贴图与设置窗口。</summary>
     private async Task HideOwnWindowsAsync()
     {
-        foreach (var pin in _pins.ToList()) pin.Hide();
-        _settingsWindow?.Hide();
+        _captureHiddenPins.Clear();
+        foreach (var pin in _pins.Where(p => p.IsVisible).ToList())
+        {
+            _captureHiddenPins.Add(pin);
+            pin.Hide();
+        }
+        _captureHiddenSettings = _settingsWindow is { IsVisible: true } ? _settingsWindow : null;
+        _captureHiddenSettings?.Hide();
 
         // 等一帧让隐藏真正生效，避免刚 Hide 就抓图抓到残影
         await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
@@ -349,10 +364,13 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
     private void RestoreOwnWindows()
     {
-        foreach (var pin in _pins.ToList())
+        foreach (var pin in _captureHiddenPins.ToList())
         {
-            if (!pin.IsVisible) pin.Show();
+            if (_pins.Contains(pin) && !pin.IsClosed && !pin.IsVisible) pin.Show();
         }
+        _captureHiddenPins.Clear();
+        if (_captureHiddenSettings is { } settings && ReferenceEquals(settings, _settingsWindow)) settings.Show();
+        _captureHiddenSettings = null;
     }
 
     private void CaptureFullScreen()
@@ -378,14 +396,25 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         FinishCapture(shot, "全屏截图");
     }
 
-    private void CaptureRegion(bool enableScroll)
+    /// <summary>区域选择：打开遮罩，用户确认后（或取消时）返回。滚动截长图在返回前跑完。</summary>
+    private Task CaptureRegionAsync(bool enableScroll)
     {
         var selector = new RegionSelectorWindow();
-        selector.Closed += async (_, _) =>
+        var finished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        selector.Closed += (_, _) => finished.TrySetResult(true);
+
+        selector.Show();
+        selector.Activate();
+
+        return FinishRegionSelectionAsync(selector, finished.Task, enableScroll);
+
+        async Task FinishRegionSelectionAsync(RegionSelectorWindow window, Task closed, bool scroll)
         {
-            var region = selector.ResultRegion;
-            var title = selector.ResultWindowTitle;
-            RestoreOwnWindows();
+            await closed.ConfigureAwait(true);
+
+            var region = window.ResultRegion;
+            var title = window.ResultWindowTitle;
+            // 滚动完成前保持原有贴图隐藏，避免污染原始帧和窗口命中。
 
             if (region is not { } rect)
             {
@@ -394,14 +423,47 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
             }
 
             AppLog.Write($"区域选择完成：{rect.Left},{rect.Top} {rect.Width}×{rect.Height}"
-                         + $"（窗口缩放 {selector.ScaleInfo}）");
+                         + $"（窗口缩放 {window.ScaleInfo}）");
 
-            if (enableScroll) await RunScrollCaptureAsync(rect).ConfigureAwait(true);
+            // 遮罩已关闭，此时再取“选区中心点的窗口”才准（遮罩开着时只会取到遮罩自己）。
+            var target = ResolveScrollTarget(rect, window.ResultWindowHandle);
+
+            if (scroll) await RunScrollCaptureAsync(rect, target).ConfigureAwait(true);
             else CaptureSelectedRegion(rect, title);
-        };
+        }
+    }
 
-        selector.Show();
-        selector.Activate();
+    /// <summary>
+    /// 取选区中心点所在的顶层窗口，作为滚动截图的滚轮投递目标。
+    /// 遮罩关闭后调用，避免取到遮罩自身；取不到时使用选区阶段记录的句柄。
+    /// </summary>
+    private static IntPtr ResolveScrollTarget(System.Drawing.Rectangle region, IntPtr fallback)
+    {
+        try
+        {
+            var point = new Native.POINT
+            {
+                X = region.Left + region.Width / 2,
+                Y = region.Top + region.Height / 2,
+            };
+
+            var hwnd = Native.WindowFromPoint(point);
+            if (hwnd != IntPtr.Zero)
+            {
+                var root = Native.GetAncestor(hwnd, Native.GA_ROOT);
+                if (root != IntPtr.Zero) hwnd = root;
+
+                Native.GetWindowThreadProcessId(hwnd, out var pid);
+                if (pid != (uint)Environment.ProcessId && Native.IsWindowVisible(hwnd))
+                    return root != IntPtr.Zero ? hwnd : hwnd;
+            }
+        }
+        catch
+        {
+            // 取不到就退回选区阶段记录的句柄
+        }
+
+        return fallback;
     }
 
     private void CaptureSelectedRegion(System.Drawing.Rectangle region, string? windowTitle)
@@ -419,46 +481,68 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
     // ---- 滚动截长图 ----
 
-    private async Task RunScrollCaptureAsync(System.Drawing.Rectangle region)
+    /// <summary>滚动截长图。<paramref name="targetWindow"/> 是选区所在的窗口，滚动前需要它在前台。</summary>
+    private async Task RunScrollCaptureAsync(System.Drawing.Rectangle region, IntPtr targetWindow = default)
     {
-        if (region.Height < 80)
+        if (region.Height < 80 || region.Width < 40)
         {
-            await _context.LogWarningAsync("选区太矮，无法进行滚动截长图。").ConfigureAwait(false);
+            await _context.NotifyAsync("无法滚动截图", "选区过小，请选择完整正文区域，并避开固定头尾与侧栏。").ConfigureAwait(true);
             return;
         }
 
         var control = new ScrollControlWindow(region);
-        var session = new ScrollCaptureSession(region, Settings);
-        var finished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        control.FinishRequested += () =>
+        using var session = new ScrollCaptureSession(region, Settings, targetWindow: targetWindow);
+        control.FinishRequested += session.Stop;
+        control.CancelRequested += session.Cancel;
+        BitmapSource? result;
+        try
         {
-            session.Stop();
-        };
-        control.CancelRequested += () =>
+            control.Show();
+            result = await session.RunAsync(p => control.Report(p, Settings.ScrollMaxHeight)).ConfigureAwait(true);
+        }
+        finally
         {
-            session.Stop();
-            finished.TrySetResult(false);
-        };
+            control.CloseControl();
+        }
 
-        control.Show();
-
-        var progress = new Progress<ScrollProgress>(p =>
-            control.Report(p, Settings.ScrollMaxHeight));
-
-        var result = await session.RunAsync(p => ((IProgress<ScrollProgress>)progress).Report(p))
-            .ConfigureAwait(true);
-
-        control.CloseControl();
-
+        var outcome = session.Outcome;
+        if (outcome?.EndReason == ScrollCaptureEndReason.Cancelled)
+        {
+            await _context.SetStatusAsync("滚动截图已取消，本次结果已丢弃。").ConfigureAwait(true);
+            return;
+        }
         if (result is null)
         {
-            await _context.LogWarningAsync("滚动截长图未获得内容（所选区域可能不可滚动）。")
-                .ConfigureAwait(false);
+            await _context.NotifyAsync("滚动截图未完成", outcome?.Message ?? "未取得可用内容，请重新选择正文区域。").ConfigureAwait(true);
             return;
         }
 
-        FinishCapture(result, $"滚动截长图 · {region.Width}×{result.PixelHeight}", region);
+        if (outcome?.EndReason == ScrollCaptureEndReason.Incomplete)
+        {
+            var saveDiagnostics = MessageBox.Show("本次画面未能可靠对齐。是否将首帧及最近采样保存为本地诊断包？\n\n图像包含网页原文，可能涉及敏感信息；仅保存在本机，不自动上传。选择否不会保存。",
+                "保存配准诊断包", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (saveDiagnostics == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    var directory = await session.SaveFailureDiagnosticsAsync().ConfigureAwait(true);
+                    MessageBox.Show(directory is null ? "可用采样不足，未生成诊断包。" : "诊断包已保存：\n" + directory + "\n\n分享前请检查敏感内容；不会自动上传。", "配准诊断包");
+                    if (directory is not null) AppLog.Write("用户确认保存配准诊断包：" + directory);
+                }
+                catch (Exception ex) { MessageBox.Show("诊断包保存失败：" + ex.Message, "配准诊断包"); }
+            }
+        }
+
+        if (outcome is not null && outcome.EndReason is not ScrollCaptureEndReason.Finished and not ScrollCaptureEndReason.NoFurtherMotion)
+        {
+            var preview = MessageBox.Show(outcome.Message + "\n\n是否预览已经确认拼接的部分？选择否将丢弃本次结果。",
+                "滚动截图不完整", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (preview != MessageBoxResult.Yes) return;
+        }
+        var label = outcome?.EndReason == ScrollCaptureEndReason.Finished ? "用户完成" : "未确认完整";
+        FinishCapture(result, $"滚动截长图 · {label} · {region.Width}×{result.PixelHeight}", region);
+        if (outcome is { IsComplete: false })
+            await _context.NotifyAsync("滚动截图结果", outcome.Message + "\n预览仅包含已确认拼接的部分；未确认整页完整。").ConfigureAwait(true);
     }
 
     // ---- 截图收尾：复制 / 贴图预览（不再自动落盘，保存走「另存为」） ----

@@ -36,7 +36,6 @@ public partial class PinWindow : Window
     private bool _pinned = true;
     private bool _dragging;
     private bool _resizing;
-    private Point _dragOffsetInWindow;
     private Point _resizeStart;
     private double _resizeStartWidth;
     private double _resizeStartHeight;
@@ -196,6 +195,28 @@ public partial class PinWindow : Window
     }
 
     // ---- 拖动与缩放 ----
+    //
+    // 同一个 PointToScreen 结果不能被当成单一坐标空间的绝对值来用：
+    // WPF 在 PER_MONITOR_AWARE 进程里把屏幕位置按「虚拟屏幕 × 全局缩放」渲染，
+    // 而每块显示器又有自己的物理原点与缩放。所以这里只用 PointToScreen 的"差值"——
+    // 差值恒等于鼠标的真实物理位移，与窗口自身移动、DPI 缩放、分辨率都无关；
+    // 需要落到 Left/Top 时，再用本窗口的 DPI 把物理位移换算回布局单位。
+
+    /// <summary>判定"用户要拖动"所需的位移（DIP），只用来滤掉按下时的鼠标抖动。</summary>
+    private const double DragThreshold = 3.0;
+
+    private Point _pressPointInWindow;
+    private bool _dragStarted;
+
+    /// <summary>上一次 MouseMove 的鼠标屏幕坐标（物理像素），用于累计位移。</summary>
+    private Point _lastPhysical;
+
+    /// <summary>
+    /// 本次点击是否属于双击序列。不直接看抬起那一帧的 ClickCount：
+    /// 贴图窗口带 WS_EX_NOACTIVATE，实测同一次双击里第二次按下报 ClickCount=2，
+    /// 紧接着的抬起却报 1，只看某一帧会漏掉。
+    /// </summary>
+    private bool _clickIsDouble;
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -220,10 +241,11 @@ public partial class PinWindow : Window
             return;
         }
 
-        // 双击图片：直接关闭预览（恢复原始尺寸改用 Alt+0 或工具条按钮）
-        if (e.ClickCount == 2)
+        // 双击的第二次按下到此为止：不进入拖动，等抬起时关闭（见 OnMouseLeftButtonUp）
+        if (e.ClickCount >= 2)
         {
-            Close();
+            _clickIsDouble = true;
+            _dragging = false;
             e.Handled = true;
             return;
         }
@@ -231,7 +253,10 @@ public partial class PinWindow : Window
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
         _dragging = true;
-        _dragOffsetInWindow = e.GetPosition(this);
+        _dragStarted = false;
+        _clickIsDouble = false;
+        _pressPointInWindow = e.GetPosition(this);
+        _lastPhysical = PointToScreen(_pressPointInWindow);
         CaptureMouse();
         e.Handled = true;
     }
@@ -312,10 +337,30 @@ public partial class PinWindow : Window
 
         if (_dragging)
         {
-            // 用屏幕坐标定位，避免窗口移动后 e.GetPosition(this) 自身漂移
-            var screen = PointToScreen(current);
-            Left = screen.X - _dragOffsetInWindow.X;
-            Top = screen.Y - _dragOffsetInWindow.Y;
+            // 先等位移超过阈值再真正挪窗：双击时两次按下之间有轻微抖动，
+            // 若按下就拖动，第一次单击的抬起前贴图已经偏离鼠标，"鼠标右下"的错位就此产生。
+            if (!_dragStarted)
+            {
+                if (Math.Abs(current.X - _pressPointInWindow.X) < DragThreshold &&
+                    Math.Abs(current.Y - _pressPointInWindow.Y) < DragThreshold)
+                {
+                    return;
+                }
+
+                _dragStarted = true;
+
+                // 真正开始拖动后再换成四向箭头，单击/双击时保持默认箭头
+                Cursor = Cursors.SizeAll;
+            }
+
+            var physical = PointToScreen(current);
+
+            // 用两次事件之间的屏幕位移移动窗口：该差值就是鼠标的真实物理位移，
+            // 与窗口自身是否移动、当前 DPI 缩放、屏幕分辨率都无关；
+            // 既不会因窗口被挪动而重复叠加，也不会因窗口移动触发额外的 MouseMove 而抖动。
+            Left += PhysicalToLayout(physical.X - _lastPhysical.X);
+            Top += PhysicalToLayout(physical.Y - _lastPhysical.Y);
+            _lastPhysical = physical;
         }
         else
         {
@@ -347,6 +392,17 @@ public partial class PinWindow : Window
             return;
         }
 
+        // 双击图片：直接关闭预览（恢复原始尺寸改用 Alt+0 或工具条按钮）。
+        // 认按下时记下的"本次点击属于双击序列"，而不是抬起这一帧的 ClickCount（见字段说明）。
+        // 期间只要发生过拖动（_dragStarted），就不是双击。
+        if (_clickIsDouble && !_dragStarted)
+        {
+            EndInteraction();
+            Close();
+            e.Handled = true;
+            return;
+        }
+
         EndInteraction();
     }
 
@@ -360,11 +416,117 @@ public partial class PinWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 屏幕物理像素位移 → WPF 布局单位（Left/Top 接受的单位）。
+    ///
+    /// 比例取自"平台给出的映射"与"本窗口的 DPI"两者之积：任何分辨率、任何放大比例下，
+    /// 鼠标移动 N 像素，窗口就在屏幕上移动 N 像素，不会在高 DPI 下被放大、也不会在跨屏时错位。
+    /// </summary>
+    private double PhysicalToLayout(double physicalDelta)
+    {
+        var scale = PlatformLayoutScale();
+        return Math.Abs(scale) < 1e-6 ? physicalDelta : physicalDelta / scale;
+    }
+
+    /// <summary>
+    /// 当前窗口下"1 个布局单位 = 多少物理像素"。
+    ///
+    /// 不写死系统缩放：PerMonitorV2 下每块显示器比例不同，窗口跨屏后会变化；
+    /// 取不到可信值时退回 1:1（与未声明 DPI 感知时的行为一致）。
+    /// </summary>
+    private double PlatformLayoutScale()
+    {
+        try
+        {
+            var source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget is { } target)
+            {
+                var m = target.TransformToDevice;
+                if (m.M11 > 0 && Math.Abs(m.M11 - m.M22) < 1e-6) return m.M11;
+            }
+        }
+        catch
+        {
+            // 回退到窗口 DPI
+        }
+
+        try
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            if (dpi.DpiScaleX > 0 && Math.Abs(dpi.DpiScaleX - dpi.DpiScaleY) < 1e-6) return dpi.DpiScaleX;
+        }
+        catch
+        {
+            // 保持 1:1
+        }
+
+        return 1.0;
+    }
+
+    /// <summary>
+    /// 窗口被拖到另一台缩放比例不同的显示器上，或用户在系统设置里改了缩放。
+    /// WPF 会按新 DPI 折算 Left/Top；贴图是无边框自绘窗口，这里保持左上角的物理位置不变，
+    /// 只让尺寸按新 DPI 重排，避免跨屏时贴图在屏幕上"弹"一下。
+    /// </summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        // 换算前的物理位置（旧 DPI 下），此刻窗口尚未按新 DPI 重排
+        var before = PhysicalTopLeft();
+
+        base.OnDpiChanged(oldDpi, newDpi);
+
+        if (oldDpi.DpiScaleX == newDpi.DpiScaleX && oldDpi.DpiScaleY == newDpi.DpiScaleY) return;
+
+        if (newDpi.DpiScaleX > 0 && oldDpi.DpiScaleX > 0)
+        {
+            // 物理尺寸保持不变：换到高 DPI 屏幕上时，同样的物理面积对应更少的布局单位
+            var physicalWidth = Width * oldDpi.DpiScaleX;
+            var width = Math.Max(80, physicalWidth / newDpi.DpiScaleX);
+            Width = width;
+            Height = width / _imageAspect + ToolbarHeight;
+        }
+
+        var after = PhysicalTopLeft();
+        Left += (before.X - after.X) / Math.Max(newDpi.DpiScaleX, 1e-6);
+        Top += (before.Y - after.Y) / Math.Max(newDpi.DpiScaleY, 1e-6);
+
+        UpdateInfo();
+    }
+
+    /// <summary>
+    /// 窗口左上角在屏幕上的位置（与 PointToScreen 同一空间，只用于求差值）。
+    ///
+    /// 必须做"是否已接入 PresentationSource"的检查：窗口首次 Show 时 WPF 会先挂根视觉、
+    /// 再设置 DPI，这一刻 OnDpiChanged 就会被调用，而 PresentationSource 还没接上，
+    /// PointToScreen 会直接抛 InvalidOperationException("此 Visual 未连接到 PresentationSource")。
+    /// 这个异常从 Window.Show() 冒出来，会把整个截图流程炸掉（滚完一轮却什么都没得到）。
+    /// </summary>
+    private Point PhysicalTopLeft()
+    {
+        try
+        {
+            var source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget is null) return new Point(Left, Top);
+
+            return PointToScreen(new Point(0, 0));
+        }
+        catch (InvalidOperationException)
+        {
+            // 尚未接入 PresentationSource：用布局坐标顶上，这里只求"前后差值"，
+            // 调用方会再除以新 DPI，误差在 1 像素级别，不影响观感。
+            return new Point(Left, Top);
+        }
+    }
+
     private void EndInteraction()
     {
         if (Mouse.Captured == this) ReleaseMouseCapture();
         _dragging = false;
+        _dragStarted = false;
         _resizing = false;
+
+        // 划选模式下光标是 I 形，不能被拖动光标覆盖
+        if (Cursor == Cursors.SizeAll) Cursor = _selectMode ? Cursors.IBeam : Cursors.Arrow;
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)

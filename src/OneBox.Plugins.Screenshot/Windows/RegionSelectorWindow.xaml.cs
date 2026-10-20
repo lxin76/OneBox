@@ -35,6 +35,9 @@ public partial class RegionSelectorWindow : Window
     /// <summary>用户选中的窗口标题（用于命名提示）；自由选区时为 null。</summary>
     public string? ResultWindowTitle { get; private set; }
 
+    /// <summary>用户选中的窗口句柄；自由选区为 <see cref="IntPtr.Zero"/>。滚动截长图据此只抓窗口内容。</summary>
+    public IntPtr ResultWindowHandle { get; private set; }
+
     /// <summary>本次使用的 DPI 缩放信息（诊断用）。</summary>
     public string ScaleInfo => $"{_scaleX:F3}×{_scaleY:F3}";
 
@@ -273,7 +276,7 @@ public partial class RegionSelectorWindow : Window
     }
 
     /// <summary>找出包含指定点的最小窗口（排除本遮罩窗口自身）。</summary>
-    private (Rect Rect, string Title)? HitTestWindow(Point point)
+    private (Rect Rect, string Title, IntPtr Handle)? HitTestWindow(Point point)
     {
         for (int i = 0; i < _windowRects.Count; i++)
         {
@@ -284,7 +287,7 @@ public partial class RegionSelectorWindow : Window
             Native.GetWindowThreadProcessId(handle, out var pid);
             if (pid == (uint)Environment.ProcessId) continue;
 
-            return (_windowRects[i], _windows[i].Title);
+            return (_windowRects[i], _windows[i].Title, handle);
         }
         return null;
     }
@@ -300,7 +303,39 @@ public partial class RegionSelectorWindow : Window
 
         ResultRegion = ToPhysical(rect);
         ResultWindowTitle = title;
+
+        // 选区的中心点落在哪个顶层窗口，滚动截图就把滚轮投递给它。
+        // 注意：不能只在 _windows 里查——那张表按“最小面积优先”命中，容易选到弹窗，
+        // 而这里要的是真正承托页面的根窗口。所以优先用 WindowFromPoint 取根窗口，
+        // 并排除本进程自己的窗口（遮罩、贴图、控制条）。取不到时退回原来的命中测试。
+        var center = new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
+        var physical = ResultRegion.Value;
+        var screenCenter = new Point(physical.Left + physical.Width / 2.0, physical.Top + physical.Height / 2.0);
+        ResultWindowHandle = ResolveTargetWindow(screenCenter) ?? HitTestWindow(center)?.Handle ?? IntPtr.Zero;
         CloseSafely();
+    }
+
+    /// <summary>取某点所在的顶层根窗口（排除本进程窗口）；取不到返回 null。</summary>
+    private static IntPtr? ResolveTargetWindow(Point point)
+    {
+        try
+        {
+            var screen = new Native.POINT { X = (int)point.X, Y = (int)point.Y };
+            var hwnd = Native.WindowFromPoint(screen);
+            if (hwnd == IntPtr.Zero) return null;
+
+            var root = Native.GetAncestor(hwnd, Native.GA_ROOT);
+            if (root != IntPtr.Zero) hwnd = root;
+
+            Native.GetWindowThreadProcessId(hwnd, out var pid);
+            if (pid == (uint)Environment.ProcessId) return null;
+
+            return Native.IsWindowVisible(hwnd) ? hwnd : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void Cancel()

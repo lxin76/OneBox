@@ -21,6 +21,11 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- 直接测试截图的 Win32 适配边界；不依赖更高 Windows SDK 的 WPF 插件项目。 -->
+    <Compile Include="..\..\src\OneBox.Plugins.Screenshot\Services\Native.cs" Link="ScreenshotNative\Native.cs" />
+    <Compile Include="..\..\src\OneBox.Plugins.Screenshot\Services\ScrollInjector.cs" Link="ScreenshotNative\ScrollInjector.cs" />
+    <Compile Include="..\..\src\OneBox.Plugins.Screenshot\Services\AppLog.cs" Link="ScreenshotNative\AppLog.cs" />
+    <Compile Include="..\..\src\OneBox.Plugins.Screenshot\Services\ScrollOcclusionGuard.cs" Link="ScreenshotNative\ScrollOcclusionGuard.cs" />
   </ItemGroup>
 
   <ItemGroup>

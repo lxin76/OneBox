@@ -140,7 +140,7 @@ public static class ScreenshotSettingsSchema
             Label = "长图高度上限",
             Kind = SettingKind.Number,
             Group = GroupScroll,
-            Description = "达到该像素高度后自动停止，避免内存失控。",
+            Description = "达到该像素高度或默认 256 MiB 内存预算后停止；结果会标明未确认完整。",
             Value = JsonSerializer.SerializeToElement(settings.ScrollMaxHeight),
             DefaultValue = JsonSerializer.SerializeToElement(20000),
             Min = 1000,
@@ -149,7 +149,8 @@ public static class ScreenshotSettingsSchema
         new SettingDescriptor
         {
             Key = KeyScrollWheelNotches,
-            Label = "每次滚动格数",
+            Label = "自适应滚动格数上限",
+            Description = "从一格起步，根据实际位移调整；安全上限为六格，旧配置超过六格时按六格执行。",
             Kind = SettingKind.Number,
             Group = GroupScroll,
             Value = JsonSerializer.SerializeToElement(settings.ScrollWheelNotches),
