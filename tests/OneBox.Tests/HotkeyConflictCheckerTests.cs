@@ -31,11 +31,4 @@ public class HotkeyConflictCheckerTests
         Assert.NotNull(warning);
     }
 
-    [Fact]
-    public void BuiltinResetHotkey_ReturnsWarning()
-    {
-        var warning = HotkeyConflictChecker.FindSelfConflict("Ctrl+Alt+K", new[] { "Ctrl+Alt+V" });
-        Assert.NotNull(warning);
-        Assert.Contains("修复键盘输入", warning);
-    }
 }

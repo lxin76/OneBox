@@ -57,8 +57,6 @@
                   Checked="OnPinnedChanged" Unchecked="OnPinnedChanged"/>
         <CheckBox x:Name="NoActivateCheck" Content="不抢焦点（点击窗口不打断当前软件）"
                   Checked="OnNoActivateChanged" Unchecked="OnNoActivateChanged"/>
-        <CheckBox x:Name="AutoPasteCheck" Content="复制后自动粘贴到前台窗口"
-                  Checked="OnAutoPasteChanged" Unchecked="OnAutoPasteChanged"/>
         <CheckBox x:Name="WordWrapCheck" Content="自动换行"
                   Checked="OnWordWrapChanged" Unchecked="OnWordWrapChanged"/>
         <CheckBox x:Name="AutoStartCheck" Content="开机自动启动"
@@ -95,24 +93,6 @@
                 <ColumnDefinition Width="150"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Text="读入剪贴板文本" Foreground="{DynamicResource Theme.Text}" VerticalAlignment="Center"/>
-            <Button x:Name="PasteHotkeyButton" Grid.Column="1" Width="170" HorizontalAlignment="Left"
-                    Click="OnRecordPasteHotkey"/>
-        </Grid>
-        <Grid Margin="0,2,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="150"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="复制文本到剪贴板" Foreground="{DynamicResource Theme.Text}" VerticalAlignment="Center"/>
-            <Button x:Name="CopyHotkeyButton" Grid.Column="1" Width="170" HorizontalAlignment="Left"
-                    Click="OnRecordCopyHotkey"/>
-        </Grid>
-        <Grid Margin="0,2,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="150"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
             <TextBlock Text="抓取选中文字" Foreground="{DynamicResource Theme.Text}" VerticalAlignment="Center"/>
             <Button x:Name="CaptureHotkeyButton" Grid.Column="1" Width="170" HorizontalAlignment="Left"
                     Click="OnRecordCaptureHotkey"/>
@@ -120,9 +100,10 @@
         <TextBlock x:Name="HotkeyWarningText" Foreground="{DynamicResource Theme.Warn}" FontSize="11" TextWrapping="Wrap"
                    Margin="0,4,0,0" Visibility="Collapsed"/>
         <TextBlock Text="点击热键按钮后按下新组合键（需含 Ctrl/Alt/Shift/Win 之一）。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,4,0,0"/>
-        <TextBlock Text="本插件不监听剪贴板：只有点击「读入」或按读入热键时才会读一次剪贴板。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
+        <TextBlock Text="在文本框里复制/粘贴请直接用 Ctrl+C / Ctrl+V，插件不再提供重复的按钮与热键。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
         <TextBlock Text="在任意编辑器选中文字后按『抓取选中文字』热键：自动模拟 Ctrl+C 复制并置顶。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
-        <TextBlock Text="键盘输入异常时，可用 Ctrl+Alt+K 或托盘菜单重置修饰键。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
+        <TextBlock Text="本插件不监听剪贴板：只有抓取选中文字时才会读一次剪贴板。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
+        <TextBlock Text="键盘像被按住时（Ctrl/Alt/Shift/Win 卡住），可用托盘菜单「修复键盘输入」重置修饰键。" Foreground="{DynamicResource Theme.TextMuted}" FontSize="11" Margin="0,2,0,0"/>
 
         <TextBlock Text="数据" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource Theme.TextStrong}" Margin="0,16,0,6"/>
         <TextBlock x:Name="DataDirText" Foreground="{DynamicResource Theme.TextMuted}" TextWrapping="Wrap" Margin="0,1,0,8"/>

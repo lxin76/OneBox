@@ -102,15 +102,15 @@ public class ScreenshotSettingsTests
     {
         var settings = new ScreenshotSettings();
 
-        // 置顶文本插件占用 Ctrl+Alt+V / Ctrl+Alt+P / Ctrl+Alt+C / Ctrl+Alt+X，截图不能用同样的组合
-        var clipboardKeys = new[] { "Ctrl+Alt+V", "Ctrl+Alt+P", "Ctrl+Alt+C", "Ctrl+Alt+X" };
+        // 置顶文本插件占用 Ctrl+Alt+V（呼出）与 Ctrl+Alt+C（抓取选中文字），截图不能用同样的组合
+        var textPinKeys = new[] { "Ctrl+Alt+V", "Ctrl+Alt+C" };
         var shotKeys = new[]
         {
             settings.RegionHotkey, settings.FullScreenHotkey,
             settings.ScrollHotkey, settings.OcrClipboardHotkey,
         };
 
-        Assert.Empty(shotKeys.Intersect(clipboardKeys));
+        Assert.Empty(shotKeys.Intersect(textPinKeys));
         // 截图插件内部也不能重复
         Assert.Equal(shotKeys.Length, shotKeys.Distinct().Count());
     }

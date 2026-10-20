@@ -125,33 +125,38 @@
             <CheckBox x:Name="PinCheck" Content="贴图默认置顶（始终浮在其它窗口最上层）"
                       Checked="OnPinChanged" Unchecked="OnPinChanged"/>
 
-            <TextBlock Text="滚动截长图" Style="{StaticResource SectionTitle}"/>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="滚动格数上限：" VerticalAlignment="Center"/>
-                <TextBox x:Name="WheelBox" Grid.Column="1" Width="52" Margin="8,0,0,0"/>
-                <TextBlock Text="格" Grid.Column="2" VerticalAlignment="Center" Margin="4,0,12,0"/>
-                <TextBlock x:Name="WheelHint" Grid.Column="3" VerticalAlignment="Center"
-                           Style="{StaticResource Hint}"/>
-            </Grid>
-            <Grid Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="高度上限：" VerticalAlignment="Center"/>
-                <TextBox x:Name="MaxHeightBox" Grid.Column="1" Width="70" Margin="8,0,0,0"/>
-                <TextBlock Text="px" Grid.Column="2" VerticalAlignment="Center" Margin="4,0,12,0"/>
-                <TextBlock Grid.Column="3" VerticalAlignment="Center" Style="{StaticResource Hint}"
-                           Text="达到高度或内存预算后停止，结果标明未确认完整。"/>
-            </Grid>
+            <StackPanel x:Name="ScrollSection">
+                <TextBlock Text="滚动截长图" Style="{StaticResource SectionTitle}"/>
+                <TextBlock x:Name="ScrollUnavailableHint" Style="{StaticResource Hint}" Margin="0,-2,0,8"
+                           Visibility="Collapsed"
+                           Text="暂不可用：目前还无法让目标页面自动滚动，只能截到首屏。以下参数与热键保留但暂不生效。"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="滚动格数上限：" VerticalAlignment="Center"/>
+                    <TextBox x:Name="WheelBox" Grid.Column="1" Width="52" Margin="8,0,0,0"/>
+                    <TextBlock Text="格" Grid.Column="2" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                    <TextBlock x:Name="WheelHint" Grid.Column="3" VerticalAlignment="Center"
+                               Style="{StaticResource Hint}"/>
+                </Grid>
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="高度上限：" VerticalAlignment="Center"/>
+                    <TextBox x:Name="MaxHeightBox" Grid.Column="1" Width="70" Margin="8,0,0,0"/>
+                    <TextBlock Text="px" Grid.Column="2" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                    <TextBlock Grid.Column="3" VerticalAlignment="Center" Style="{StaticResource Hint}"
+                               Text="达到高度或内存预算后停止，结果标明未确认完整。"/>
+                </Grid>
+            </StackPanel>
 
             <TextBlock Text="文字识别" Style="{StaticResource SectionTitle}"/>
             <Grid>
@@ -194,7 +199,7 @@
                     <ColumnDefinition Width="140"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="滚动截长图" VerticalAlignment="Center"/>
+                <TextBlock x:Name="ScrollHotkeyLabel" Text="滚动截长图" VerticalAlignment="Center"/>
                 <Button x:Name="ScrollHotkeyButton" Grid.Column="1" Width="180"
                         HorizontalAlignment="Left" Click="OnRecordScrollHotkey"/>
             </Grid>

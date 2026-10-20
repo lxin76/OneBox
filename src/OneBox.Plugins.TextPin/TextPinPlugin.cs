@@ -9,26 +9,21 @@ using OneBox.Plugins.TextPin.Windows;
 namespace OneBox.Plugins.TextPin;
 
 /// <summary>
-/// 置顶文本小工具插件主体：一个常驻置顶的纯文本框 + 显式复制/粘贴 + 自动保存。
+/// 置顶文本小工具插件主体：一个常驻置顶的纯文本框 + 抓取选中文字 + 自动保存。
 /// 全局热键、托盘菜单、日志与设置目录全部由宿主提供（见 <see cref="PluginContext"/>）。
 ///
+/// 复制/粘贴交给文本框自身的 Ctrl+C / Ctrl+V，插件不再重复实现一套剪贴板按钮与热键。
 /// 与旧版剪贴板插件的关键区别：**不注册任何剪贴板监听器**。
-/// 只有用户点按钮或按热键时，才会读写一次剪贴板。
+/// 只有用户按下「抓取选中文字」热键时，才会读一次剪贴板。
 /// </summary>
 public sealed class TextPinPlugin : IAsyncDisposable
 {
-    /// <summary>热键动作标识（与宿主转发回来的 actionId 对应）。</summary>
-    /// <summary>呼出热键的动作标识（窗口刷新提示文本时也要用）。</summary>
+    /// <summary>呼出热键的动作标识（宿主转发回来的 actionId；窗口刷新提示文本时也要用）。</summary>
     public const string HotkeyToggle = "toggle";
-    private const string HotkeyPaste = "paste";
-    private const string HotkeyCopy = "copy";
     private const string HotkeyCapture = "capture";
-    private const string HotkeyResetKeys = "resetKeys";
 
     /// <summary>托盘菜单项标识。</summary>
     private const string MenuShow = "show";
-    private const string MenuPaste = "paste";
-    private const string MenuCopy = "copy";
     private const string MenuCapture = "capture";
     private const string MenuClear = "clear";
     private const string MenuSettings = "settings";
@@ -160,28 +155,9 @@ public sealed class TextPinPlugin : IAsyncDisposable
             },
             new()
             {
-                ActionId = HotkeyPaste,
-                Combination = Settings.PasteHotkey,
-                Description = "置顶文本：把剪贴板文本读入文本框",
-            },
-            new()
-            {
-                ActionId = HotkeyCopy,
-                Combination = Settings.CopyHotkey,
-                Description = "置顶文本：复制文本到剪贴板",
-            },
-            new()
-            {
                 ActionId = HotkeyCapture,
                 Combination = Settings.CaptureHotkey,
                 Description = "置顶文本：抓取选中文字并置顶",
-            },
-            new()
-            {
-                ActionId = HotkeyResetKeys,
-                Combination = "Ctrl+Alt+K",
-                Description = "置顶文本：修复键盘输入（重置修饰键）",
-                Fixed = true,
             },
         };
 
@@ -191,7 +167,7 @@ public sealed class TextPinPlugin : IAsyncDisposable
             WriteLog($"热键 {failure.Combination} 未生效：{failure.Error}");
     }
 
-    /// <summary>把置顶、自动粘贴等状态同步给宿主托盘菜单（勾选状态）。</summary>
+    /// <summary>把本插件的菜单项声明给宿主的托盘子菜单。</summary>
     public async Task RefreshTrayMenuAsync()
     {
         await _context.DeclareTrayMenuAsync(
@@ -200,16 +176,6 @@ public sealed class TextPinPlugin : IAsyncDisposable
             {
                 Id = MenuShow,
                 Text = "显示/隐藏文本框",
-            },
-            new TrayMenuItem
-            {
-                Id = MenuPaste,
-                Text = "把剪贴板文本读入",
-            },
-            new TrayMenuItem
-            {
-                Id = MenuCopy,
-                Text = "复制文本到剪贴板",
             },
             new TrayMenuItem
             {
@@ -227,10 +193,13 @@ public sealed class TextPinPlugin : IAsyncDisposable
                 Text = "置顶文本设置…",
             },
             new TrayMenuItem { Kind = TrayMenuItemKind.Separator },
+            // 救急用：注入按键的 key-up 万一丢失，系统会以为 Ctrl/Alt/Shift/Win 还按着。
+            // 这条路只在托盘菜单里保留一个入口，不占用全局热键。
             new TrayMenuItem
             {
                 Id = MenuResetKeys,
                 Text = "修复键盘输入（重置修饰键）",
+                ToolTip = "强制松开 Ctrl/Alt/Shift/Win（键盘像被按住时用）",
             },
         ]).ConfigureAwait(false);
     }
@@ -278,18 +247,8 @@ public sealed class TextPinPlugin : IAsyncDisposable
             case HotkeyToggle:
                 _window?.ToggleVisibility();
                 break;
-            case HotkeyPaste:
-                _window?.PasteFromClipboard(alsoPaste: false);
-                break;
-            case HotkeyCopy:
-                _window?.CopyToClipboard(autoPaste: false);
-                break;
             case HotkeyCapture:
                 CaptureSelection();
-                break;
-            case HotkeyResetKeys:
-                PasteService.ReleaseModifiers();
-                WriteLog("已重置键盘修饰键状态");
                 break;
         }
     }
@@ -300,12 +259,6 @@ public sealed class TextPinPlugin : IAsyncDisposable
         {
             case MenuShow:
                 _window?.ToggleVisibility();
-                break;
-            case MenuPaste:
-                _window?.PasteFromClipboard(alsoPaste: false);
-                break;
-            case MenuCopy:
-                _window?.CopyToClipboard(autoPaste: false);
                 break;
             case MenuCapture:
                 CaptureSelection();
@@ -333,7 +286,7 @@ public sealed class TextPinPlugin : IAsyncDisposable
         _window?.ShowBusy("正在抓取选中文字…");
 
         // 在 UI 线程就把"该归还给谁"问清楚：后台线程不能碰 WPF 窗口属性
-        var restoreTarget = _window?.TakeForegroundTargetForPaste() ?? IntPtr.Zero;
+        var restoreTarget = _window?.TakeForegroundTargetForCapture() ?? IntPtr.Zero;
 
         // 热键里若还按着 Alt/Ctrl，注入的 Ctrl+C 会变成别的组合，必须先等修饰键松开
         PasteService.RunAfterModifiersReleased(() =>
@@ -365,30 +318,6 @@ public sealed class TextPinPlugin : IAsyncDisposable
                 }
             }));
         });
-    }
-
-    /// <summary>复制文本到剪贴板；<paramref name="autoPaste"/> 为真时接着粘贴到前台窗口。</summary>
-    public void CopyText(string text, bool autoPaste)
-    {
-        if (string.IsNullOrEmpty(text)) return;
-
-        // 剪贴板写入放到后台 STA 线程，UI 线程不因剪贴板争用而卡顿
-        ClipboardText.WriteAsync(text, autoPaste
-            ? () => _dispatcher.BeginInvoke(new Action(() =>
-            {
-                try
-                {
-                    PasteService.PasteToForeground(_window?.TakeForegroundTargetForPaste() ?? IntPtr.Zero);
-                    WriteLog("已复制并自动粘贴");
-                }
-                catch (Exception ex)
-                {
-                    WriteLog($"粘贴失败: {ex.Message}");
-                }
-            }))
-            : null);
-
-        WriteLog(autoPaste ? "已复制到剪贴板并粘贴" : "已复制到剪贴板");
     }
 
     /// <summary>设置变更后保存（设置窗口调用）。</summary>

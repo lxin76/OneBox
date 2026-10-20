@@ -15,9 +15,6 @@ public sealed class Settings
     /// </summary>
     public bool NoActivate { get; set; } = true;
 
-    /// <summary>复制到剪贴板后是否自动粘贴到前台窗口（粘贴用模拟 Ctrl+V 实现）。</summary>
-    public bool AutoPaste { get; set; } = true;
-
     /// <summary>正文字号。</summary>
     public double FontSize { get; set; } = 13;
 
@@ -31,18 +28,8 @@ public sealed class Settings
     /// 注意：默认避开 Ctrl+Shift 组合，因为中文 Windows 上 Ctrl+Shift 会被输入法切换器拦截。</summary>
     public string ToggleHotkey { get; set; } = "Ctrl+Alt+V";
 
-    /// <summary>把当前剪贴板里的纯文本读入置顶窗的全局热键（一次性读取，不是监听）。</summary>
-    public string PasteHotkey { get; set; } = "Ctrl+Alt+P";
-
-    /// <summary>
-    /// 把置顶文本复制回剪贴板的全局热键。
-    ///
-    /// 与「抓取选中文字」互换：X 更贴近"抓取/剪切"的直觉（Ctrl+X），
-    /// C 更贴近"复制"（Ctrl+C），与系统里这两个习惯键的语义一致。
-    /// </summary>
-    public string CopyHotkey { get; set; } = "Ctrl+Alt+X";
-
     /// <summary>抓取当前选中文字并置顶的全局热键（"Ctrl+Alt+C" 形式）。
-    /// 在任意编辑器里选中文字后按下：模拟 Ctrl+C 复制，再把文本读进置顶窗。</summary>
+    /// 在任意编辑器里选中文字后按下：模拟 Ctrl+C 复制，再把文本读进置顶窗。
+    /// 这是本插件唯一注入按键的功能——复制/粘贴本身交给系统与文本框原生行为。</summary>
     public string CaptureHotkey { get; set; } = "Ctrl+Alt+C";
 }

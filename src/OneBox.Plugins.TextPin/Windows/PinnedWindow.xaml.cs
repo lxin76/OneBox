@@ -15,6 +15,9 @@ namespace OneBox.Plugins.TextPin.Windows;
 /// 常驻置顶的纯文本框。支持拖动、右下角缩放、可选置顶与"点击不抢焦点"，
 /// 内容改动后自动保存到插件数据目录。
 ///
+/// 文本的复制/粘贴走 TextBox 原生的 Ctrl+C / Ctrl+V，窗口不再提供重复的按钮与热键；
+/// 窗口只保留「抓取选中文字」这一个额外的键盘动作。
+///
 /// 焦点策略：置顶模式下窗口带 WS_EX_NOACTIVATE，点击工具栏不会打断前台软件；
 /// 但纯文本框必须能输入，所以鼠标按进正文区时临时允许激活，失焦后自动恢复，
 /// 并把前台还给之前的目标窗口。
@@ -38,7 +41,7 @@ public partial class PinnedWindow : Window
     private IntPtr _preEditForeground;
     private IntPtr _lastForeignForeground;
 
-    /// <summary>正在程序化设置文本（加载/粘贴），不触发自动保存与状态刷新。</summary>
+    /// <summary>正在程序化设置文本（加载/抓取置顶），不触发自动保存与状态刷新。</summary>
     private bool _suppressTextEvents;
 
     public PinnedWindow(TextPinPlugin plugin)
@@ -79,7 +82,7 @@ public partial class PinnedWindow : Window
 
     // ---- 文本 ----
 
-    /// <summary>程序化设置文本（启动加载、粘贴读入），不触发自动保存。</summary>
+    /// <summary>程序化设置文本（启动加载、抓取置顶），不触发自动保存。</summary>
     public void SetTextSilently(string? text)
     {
         _suppressTextEvents = true;
@@ -132,7 +135,7 @@ public partial class PinnedWindow : Window
 
     /// <summary>
     /// 接受抓取到的选中文字：替换正文、立即落盘，并把窗口显示出来。
-    /// 与"读入剪贴板"共用同一套截断与保存逻辑。
+    /// 与加载既有内容共用同一套截断与保存逻辑。
     /// </summary>
     public void AdoptCapturedText(string text)
     {
@@ -219,8 +222,8 @@ public partial class PinnedWindow : Window
             : ScrollBarVisibility.Auto;
     }
 
-    /// <summary>若本窗口正被激活（用户正在输入），返回应归还的前台窗口句柄。</summary>
-    public IntPtr TakeForegroundTargetForPaste()
+    /// <summary>若本窗口正被激活（用户正在输入），返回应在注入 Ctrl+C 前归还的前台窗口句柄。</summary>
+    public IntPtr TakeForegroundTargetForCapture()
     {
         if (!IsActive) return IntPtr.Zero;
         var target = _preEditForeground != IntPtr.Zero ? _preEditForeground : _lastForeignForeground;
@@ -253,21 +256,13 @@ public partial class PinnedWindow : Window
         SaveNow();
     }
 
-    /// <summary>正文快捷键：Ctrl+Enter 复制并粘贴，Esc 失焦收起。</summary>
+    /// <summary>正文快捷键：Esc 退出输入、失焦收起。</summary>
     private void OnEditorPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            Keyboard.ClearFocus();
-            return;
-        }
+        if (e.Key != Key.Escape) return;
 
-        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
-        {
-            e.Handled = true;
-            CopyToClipboard(autoPaste: true);
-        }
+        e.Handled = true;
+        Keyboard.ClearFocus();
     }
 
     // ---- 工具栏动作 ----
@@ -279,61 +274,12 @@ public partial class PinnedWindow : Window
         ApplyPinned(_plugin.Settings.Pinned);
     }
 
-    /// <summary>把剪贴板里的纯文本读入（一次性读取，不是监听）。</summary>
-    private void OnPasteClick(object sender, RoutedEventArgs e) => PasteFromClipboard(alsoPaste: false);
-
-    /// <summary>复制全部文本；<paramref name="alsoPaste"/> 为真时接着粘贴到前台窗口。</summary>
-    private void OnCopyClick(object sender, RoutedEventArgs e)
-        => CopyToClipboard(autoPaste: _plugin.Settings.AutoPaste);
-
     private void OnSettingsClick(object sender, RoutedEventArgs e) => OpenSettings();
 
     private void OnHideClick(object sender, RoutedEventArgs e)
     {
         SaveNow();
         Hide();
-    }
-
-    /// <summary>把剪贴板里的纯文本读入文本框。</summary>
-    /// <param name="alsoPaste">读入后是否再粘贴回前台窗口（热键流程用）。</param>
-    public void PasteFromClipboard(bool alsoPaste)
-    {
-        var text = ClipboardText.TryRead();
-        if (text is null)
-        {
-            SetStatus("剪贴板里没有文本");
-            return;
-        }
-
-        SetTextSilently(PlainText.Sanitize(text, _plugin.Settings.MaxTextLength));
-        SaveNow();
-        SetStatus($"已读入剪贴板文本 · {TextStats.Measure(EditorBox.Text).Describe()}");
-
-        if (alsoPaste) CopyToClipboard(autoPaste: true);
-    }
-
-    /// <summary>把当前文本复制到剪贴板，可选接着粘贴到前台窗口。</summary>
-    public void CopyToClipboard(bool autoPaste)
-    {
-        var text = EditorBox.Text;
-        if (string.IsNullOrEmpty(text))
-        {
-            SetStatus("没有可复制的内容");
-            return;
-        }
-
-        _plugin.CopyText(text, autoPaste && _plugin.Settings.AutoPaste);
-        SetStatus(autoPaste && _plugin.Settings.AutoPaste ? "已复制并粘贴" : "已复制到剪贴板");
-
-        // 短暂反馈，避免用户不确定有没有生效
-        CopyButton.Content = "✓";
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            CopyButton.Content = "📋";
-        };
-        timer.Start();
     }
 
     // ---- 显示/隐藏与设置窗 ----

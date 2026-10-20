@@ -24,7 +24,6 @@ public class SettingsSchemaTests
 
         Assert.Contains(SettingsSchema.KeyPinned, keys);
         Assert.Contains(SettingsSchema.KeyNoActivate, keys);
-        Assert.Contains(SettingsSchema.KeyAutoPaste, keys);
         Assert.Contains(SettingsSchema.KeyFontSize, keys);
         Assert.Contains(SettingsSchema.KeyWordWrap, keys);
         Assert.Contains(SettingsSchema.KeyMaxTextLength, keys);
@@ -36,16 +35,13 @@ public class SettingsSchemaTests
     [Fact]
     public void Apply_BoolKeys_TakeEffect()
     {
-        var settings = new Settings { Pinned = true, NoActivate = true, AutoPaste = true, WordWrap = true };
+        var settings = new Settings { Pinned = true, NoActivate = true, WordWrap = true };
 
         Assert.True(SettingsSchema.Apply(settings, SettingsSchema.KeyPinned, Json("false")));
         Assert.False(settings.Pinned);
 
         Assert.True(SettingsSchema.Apply(settings, SettingsSchema.KeyNoActivate, Json("false")));
         Assert.False(settings.NoActivate);
-
-        Assert.True(SettingsSchema.Apply(settings, SettingsSchema.KeyAutoPaste, Json("false")));
-        Assert.False(settings.AutoPaste);
 
         Assert.True(SettingsSchema.Apply(settings, SettingsSchema.KeyWordWrap, Json("false")));
         Assert.False(settings.WordWrap);
@@ -104,17 +100,17 @@ public class SettingsSchemaTests
     [Fact]
     public void ApplyAll_AppliesKnownAndSkipsUnknown()
     {
-        var settings = new Settings { Pinned = true, AutoPaste = true };
+        var settings = new Settings { Pinned = true, WordWrap = true };
         var changes = new List<OneBox.Abstractions.SettingChange>
         {
             new() { Key = SettingsSchema.KeyPinned, Value = Json("false") },
             new() { Key = "bogus", Value = Json("1") },
-            new() { Key = SettingsSchema.KeyAutoPaste, Value = Json("false") },
+            new() { Key = SettingsSchema.KeyWordWrap, Value = Json("false") },
         };
 
         Assert.True(SettingsSchema.ApplyAll(settings, changes));
         Assert.False(settings.Pinned);
-        Assert.False(settings.AutoPaste);
+        Assert.False(settings.WordWrap);
     }
 
     [Fact]

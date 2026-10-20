@@ -42,6 +42,26 @@ public class ScreenshotSettingsSchemaTests
     }
 
     [Fact]
+    public void 滚动参数在功能不可用时只读并注明原因()
+    {
+        if (ScreenshotSettingsSchema.ScrollCaptureAvailable) return; // 功能恢复后本用例不再适用
+
+        var descriptors = ScreenshotSettingsSchema.Describe(new ScreenshotSettings())
+            .ToDictionary(d => d.Key);
+
+        foreach (var key in new[]
+                 {
+                     ScreenshotSettingsSchema.KeyScrollMinMatchRows,
+                     ScreenshotSettingsSchema.KeyScrollMaxHeight,
+                     ScreenshotSettingsSchema.KeyScrollWheelNotches,
+                 })
+        {
+            Assert.True(descriptors[key].ReadOnly, $"{key} 应标为只读，否则用户改了也不生效");
+            Assert.Contains("暂不可用", descriptors[key].Description!);
+        }
+    }
+
+    [Fact]
     public void 声明里没有重复的键()
     {
         var keys = ScreenshotSettingsSchema.Describe(new ScreenshotSettings()).Select(d => d.Key).ToList();

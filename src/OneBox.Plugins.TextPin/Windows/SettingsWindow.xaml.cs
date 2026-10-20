@@ -16,8 +16,6 @@ public partial class SettingsWindow : Window
     private readonly PinnedWindow _pinnedWindow;
 
     private bool _recordingToggle;
-    private bool _recordingPaste;
-    private bool _recordingCopy;
     private bool _recordingCapture;
     private bool _loading;
     private HotkeyRecorder? _recorder;
@@ -41,7 +39,6 @@ public partial class SettingsWindow : Window
         _loading = true;
         PinnedCheck.IsChecked = settings.Pinned;
         NoActivateCheck.IsChecked = settings.NoActivate;
-        AutoPasteCheck.IsChecked = settings.AutoPaste;
         WordWrapCheck.IsChecked = settings.WordWrap;
         // 开机自启属于宿主级设置，插件设置页只展示状态
         AutoStartCheck.IsChecked = AutoStartService.IsEnabled();
@@ -52,8 +49,6 @@ public partial class SettingsWindow : Window
         MaxLengthBox.Text = settings.MaxTextLength.ToString();
         DataDirText.Text = "数据目录：" + AppPaths.DataDirectory;
         ToggleHotkeyButton.Content = settings.ToggleHotkey;
-        PasteHotkeyButton.Content = settings.PasteHotkey;
-        CopyHotkeyButton.Content = settings.CopyHotkey;
         CaptureHotkeyButton.Content = settings.CaptureHotkey;
 
         ShowHotkeyWarning(BuildHotkeyWarning());
@@ -73,7 +68,6 @@ public partial class SettingsWindow : Window
         var failed = _plugin.HotkeyResults.Where(r => !r.Registered).ToList();
         if (failed.Count == 0) return null;
 
-        // 固定热键失败不是用户改的，单独说明更清楚
         var lines = failed.Select(f => $"· {f.Combination}：{f.Error}");
         return "⚠ 以下热键未能生效\n" + string.Join("\n", lines);
     }
@@ -99,14 +93,6 @@ public partial class SettingsWindow : Window
         if (_loading) return;
         _plugin.Settings.NoActivate = NoActivateCheck.IsChecked == true;
         _pinnedWindow.ApplyNoActivate(_plugin.Settings.NoActivate);
-        _plugin.SaveSettings();
-        _plugin.RefreshSettingsAsync();
-    }
-
-    private void OnAutoPasteChanged(object sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        _plugin.Settings.AutoPaste = AutoPasteCheck.IsChecked == true;
         _plugin.SaveSettings();
         _plugin.RefreshSettingsAsync();
     }
@@ -176,25 +162,16 @@ public partial class SettingsWindow : Window
 
     // ---- 热键录制 ----
 
-    private void OnRecordToggleHotkey(object sender, RoutedEventArgs e) => StartRecording(toggle: true);
+    private void OnRecordToggleHotkey(object sender, RoutedEventArgs e) => StartRecording(capture: false);
 
-    private void OnRecordPasteHotkey(object sender, RoutedEventArgs e) => StartRecording(toggle: false);
+    private void OnRecordCaptureHotkey(object sender, RoutedEventArgs e) => StartRecording(capture: true);
 
-    private void OnRecordCopyHotkey(object sender, RoutedEventArgs e) => StartRecording(toggle: false, copy: true);
-
-    private void OnRecordCaptureHotkey(object sender, RoutedEventArgs e) => StartRecording(toggle: false, capture: true);
-
-    private void StartRecording(bool toggle, bool copy = false, bool capture = false)
+    private void StartRecording(bool capture)
     {
-        _recordingToggle = toggle;
-        _recordingPaste = !toggle && !copy && !capture;
-        _recordingCopy = copy;
+        _recordingToggle = !capture;
         _recordingCapture = capture;
         ShowHotkeyWarning(null);
-        var button = toggle ? ToggleHotkeyButton
-            : copy ? CopyHotkeyButton
-            : capture ? CaptureHotkeyButton
-            : PasteHotkeyButton;
+        var button = capture ? CaptureHotkeyButton : ToggleHotkeyButton;
         button.Content = "按下新组合键…";
         button.Focus();
 
@@ -210,7 +187,7 @@ public partial class SettingsWindow : Window
         _recordTimer.Tick += (_, _) =>
         {
             _recordTimer.Stop();
-            if (_recordingToggle || _recordingPaste || _recordingCopy || _recordingCapture)
+            if (_recordingToggle || _recordingCapture)
                 ShowHotkeyWarning("未检测到按键——若已按组合键却没反应，说明该组合可能已被其他软件占用");
         };
         _recordTimer.Start();
@@ -218,7 +195,7 @@ public partial class SettingsWindow : Window
 
     private void OnKeyCaptured(Key key, ModifierKeys modifiers)
     {
-        if (!_recordingToggle && !_recordingPaste && !_recordingCopy && !_recordingCapture) return;
+        if (!_recordingToggle && !_recordingCapture) return;
 
         if (key == Key.Escape)
         {
@@ -236,10 +213,8 @@ public partial class SettingsWindow : Window
         // 自身重复检查（仅警告，不阻止保存）；跨插件与外部占用由宿主仲裁后回报
         var warning = CheckSelfConflict(combo);
 
-        if (_recordingToggle) _plugin.Settings.ToggleHotkey = combo;
-        else if (_recordingCopy) _plugin.Settings.CopyHotkey = combo;
-        else if (_recordingCapture) _plugin.Settings.CaptureHotkey = combo;
-        else _plugin.Settings.PasteHotkey = combo;
+        if (_recordingCapture) _plugin.Settings.CaptureHotkey = combo;
+        else _plugin.Settings.ToggleHotkey = combo;
 
         _plugin.SaveSettings();
         CancelRecording();
@@ -256,19 +231,14 @@ public partial class SettingsWindow : Window
         ShowHotkeyWarning(BuildHotkeyWarning() ?? CheckSelfConflict(_plugin.Settings.ToggleHotkey));
     }
 
-    /// <summary>检查新热键是否与自身其他快捷键或固定热键重复。</summary>
+    /// <summary>检查新热键是否与自身的另一个热键重复。</summary>
     private string? CheckSelfConflict(string combo)
     {
-        var current = _recordingToggle ? _plugin.Settings.ToggleHotkey
-            : _recordingCopy ? _plugin.Settings.CopyHotkey
-            : _recordingCapture ? _plugin.Settings.CaptureHotkey
-            : _plugin.Settings.PasteHotkey;
+        var current = _recordingCapture ? _plugin.Settings.CaptureHotkey : _plugin.Settings.ToggleHotkey;
 
         var others = new[]
             {
                 _plugin.Settings.ToggleHotkey,
-                _plugin.Settings.PasteHotkey,
-                _plugin.Settings.CopyHotkey,
                 _plugin.Settings.CaptureHotkey,
             }
             .Where(h => !string.Equals(h, current, StringComparison.OrdinalIgnoreCase))
@@ -289,8 +259,6 @@ public partial class SettingsWindow : Window
         if (_recorder is { IsRecording: true }) return;
 
         ToggleHotkeyButton.Content = _plugin.Settings.ToggleHotkey;
-        PasteHotkeyButton.Content = _plugin.Settings.PasteHotkey;
-        CopyHotkeyButton.Content = _plugin.Settings.CopyHotkey;
         CaptureHotkeyButton.Content = _plugin.Settings.CaptureHotkey;
 
         ShowHotkeyWarning(BuildHotkeyWarning());
@@ -312,10 +280,8 @@ public partial class SettingsWindow : Window
 
     private void CancelRecording()
     {
-        _recordingToggle = _recordingPaste = _recordingCopy = _recordingCapture = false;
+        _recordingToggle = _recordingCapture = false;
         ToggleHotkeyButton.Content = _plugin.Settings.ToggleHotkey;
-        PasteHotkeyButton.Content = _plugin.Settings.PasteHotkey;
-        CopyHotkeyButton.Content = _plugin.Settings.CopyHotkey;
         CaptureHotkeyButton.Content = _plugin.Settings.CaptureHotkey;
     }
 

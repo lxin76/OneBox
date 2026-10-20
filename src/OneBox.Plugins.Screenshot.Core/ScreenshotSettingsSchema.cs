@@ -31,6 +31,14 @@ public static class ScreenshotSettingsSchema
     public const string KeyOcrStripCjkSpaces = "ocrStripCjkSpaces";
     public const string KeyOcrEnhanceImage = "ocrEnhanceImage";
 
+    /// <summary>
+    /// 滚动截长图当前是否可用。功能代码保留，但这个开关是**唯一真相**：
+    /// 插件主体的入口（热键/菜单/设置页）与这里声明的参数都读它。
+    /// 目前暂不可用——目标页面不会被自动滚动，只能截到首屏（见 docs/handoff-scrolling-capture.md）。
+    /// 修好后把它改成 true 即可恢复全部入口。
+    /// </summary>
+    public static readonly bool ScrollCaptureAvailable = false;
+
     // 分组标题
     private const string GroupSave = "保存";
     private const string GroupCapture = "截图";
@@ -128,11 +136,12 @@ public static class ScreenshotSettingsSchema
             Label = "最小匹配行数",
             Kind = SettingKind.Number,
             Group = GroupScroll,
-            Description = "两帧之间至少要有多少行内容一致才认为滚动成功。太小会把动态内容误判为滚动，太大会导致长页面匹配失败。",
+            Description = "滚动截长图暂不可用，该参数暂不生效。两帧之间至少要有多少行内容一致才认为滚动成功。",
             Value = JsonSerializer.SerializeToElement(settings.ScrollMinMatchRows),
             DefaultValue = JsonSerializer.SerializeToElement(24),
             Min = 4,
             Max = 400,
+            ReadOnly = !ScrollCaptureAvailable,
         },
         new SettingDescriptor
         {
@@ -140,23 +149,25 @@ public static class ScreenshotSettingsSchema
             Label = "长图高度上限",
             Kind = SettingKind.Number,
             Group = GroupScroll,
-            Description = "达到该像素高度或默认 256 MiB 内存预算后停止；结果会标明未确认完整。",
+            Description = "滚动截长图暂不可用，该参数暂不生效。达到该像素高度或默认 256 MiB 内存预算后停止。",
             Value = JsonSerializer.SerializeToElement(settings.ScrollMaxHeight),
             DefaultValue = JsonSerializer.SerializeToElement(20000),
             Min = 1000,
             Max = 200000,
+            ReadOnly = !ScrollCaptureAvailable,
         },
         new SettingDescriptor
         {
             Key = KeyScrollWheelNotches,
             Label = "自适应滚动格数上限",
-            Description = "从一格起步，根据实际位移调整；安全上限为六格，旧配置超过六格时按六格执行。",
+            Description = "滚动截长图暂不可用，该参数暂不生效。从一格起步，根据实际位移调整；安全上限为六格。",
             Kind = SettingKind.Number,
             Group = GroupScroll,
             Value = JsonSerializer.SerializeToElement(settings.ScrollWheelNotches),
             DefaultValue = JsonSerializer.SerializeToElement(3),
             Min = 1,
             Max = 30,
+            ReadOnly = !ScrollCaptureAvailable,
         },
 
         new SettingDescriptor

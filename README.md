@@ -38,9 +38,9 @@ OneBox.exe（宿主：托盘 + 工具箱 + 热键/托盘/设置/日志/崩溃重
 
 | 小工具 | 插件 id | 简介 | 详细文档 |
 | --- | --- | --- | --- |
-| 置顶文本 | `textpin` | 常驻置顶的纯文本框，随手记与暂存纯文本；一键抓取选中文字置顶、复制/粘贴回目标软件，**不监听剪贴板** | [README](src/OneBox.Plugins.TextPin/README.md) |
+| 置顶文本 | `textpin` | 常驻置顶的纯文本框，随手记与暂存纯文本；复制粘贴用系统原生 Ctrl+C / Ctrl+V，另可一键抓取选中文字置顶，**不监听剪贴板** | [README](src/OneBox.Plugins.TextPin/README.md) |
 | 快速便签 | `quicknote` | 热键呼出一个置顶便签窗，内容自动保存；同时是编写新小工具的模板 | [README](src/OneBox.Plugins.QuickNote/README.md) |
-| 截图 | `screenshot` | 区域/全屏/滚动截长图，贴图置顶不被遮挡、贴回原位；贴图框选/箭头/文字标注与撤销；另存为保存，双引擎离线文字识别与划选取字 | [README](src/OneBox.Plugins.Screenshot/README.md) |
+| 截图 | `screenshot` | 区域/全屏截图（滚动截长图暂不可用），贴图置顶不被遮挡、贴回原位；贴图框选/箭头/文字标注与撤销；另存为保存，双引擎离线文字识别与划选取字 | [README](src/OneBox.Plugins.Screenshot/README.md) |
 
 > 想自己写一个小工具，从[快速便签](src/OneBox.Plugins.QuickNote/README.md)照搬即可，接口见下面的[写一个小工具](#写一个小工具)。
 
@@ -118,12 +118,11 @@ OneBox.exe --settings    启动并打开设置中心
 **热键页按小工具分组**，而不是把所有热键平铺成一列：
 
 ```
-▾ 🖼 截图          4 个热键 · 1 个未生效        有冲突
+▾ 🖼 截图          3 个热键 · 1 个未生效        有冲突
     ▎Ctrl+Alt+A   截图：区域截图                 已生效
     ▎Ctrl+Alt+F   截图：全屏截图                 已生效
-    ▎Ctrl+Alt+S   截图：滚动截长图               已生效
     ▎Ctrl+Alt+T   截图：识别剪贴板图片文字        未生效：已被其他小工具占用
-▸ 📌 置顶文本      5 个热键                      正常
+▸ 📌 置顶文本      2 个热键                      正常
 ```
 
 - 每个小工具一层卡片，**组头直接给出数量与冲突概况**（正常 / 有冲突 / 未运行），不用展开就能看出哪个小工具出了问题
@@ -285,7 +284,7 @@ src/OneBox.Host/            宿主（WPF 托盘程序，产物名 OneBox.exe）
 src/OneBox.Plugins.TextPin/      置顶文本小工具（独立进程，自带全部 UI，不监听剪贴板）
 src/OneBox.Plugins.TextPin.Core/ 置顶文本的纯逻辑库（文本规范化与截断、统计、落盘、设置声明，可单测）
 src/OneBox.Plugins.QuickNote/      示例小工具，兼作模板
-src/OneBox.Plugins.Screenshot/      截图小工具（区域/全屏/滚动截长图、贴图置顶、OCR、划选取字）
+src/OneBox.Plugins.Screenshot/      截图小工具（区域/全屏截图、贴图置顶、OCR、划选取字；滚动截长图暂不可用）
 src/OneBox.Plugins.Screenshot.Core/ 截图的纯逻辑库（文件名、滚动拼接、文本整理、OCR 版面与选区，可单测）
 tests/OneBox.Tests/                单元测试
 tools/icons/                       图标生成器（造型、尺寸策略、检查图）

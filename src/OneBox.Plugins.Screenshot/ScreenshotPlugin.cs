@@ -33,6 +33,9 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     private const string MenuTogglePins = "menu.togglePins";
     private const string MenuSettings = "menu.settings";
 
+    /// <summary>滚动截长图是否可用；开关定义在 <see cref="ScreenshotSettingsSchema"/>，这里只是别名。</summary>
+    private static readonly bool ScrollCaptureAvailable = ScreenshotSettingsSchema.ScrollCaptureAvailable;
+
     private readonly PluginContext _context;
     private readonly Dispatcher _dispatcher;
 
@@ -108,6 +111,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     {
         var failed = HotkeyResults.Count(r => !r.Registered);
         var text = failed == 0 ? "已就绪" : $"已就绪 · {failed} 个热键被占用";
+        if (!ScrollCaptureAvailable) text += " · 滚动截长图暂不可用";
         var languages = OcrService.AvailableLanguages();
         if (languages.Count == 0) text += " · 未安装识别语言包";
         return text;
@@ -126,33 +130,41 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     /// </summary>
     private async Task DeclareHotkeysAsync()
     {
-        HotkeyResults = await _context.DeclareHotkeysAsync(
-        [
-            new HotkeyDeclaration
+        var declarations = new List<HotkeyDeclaration>
+        {
+            new()
             {
                 ActionId = HotkeyRegion,
                 Combination = Settings.RegionHotkey,
                 Description = "截图：区域截图",
             },
-            new HotkeyDeclaration
+            new()
             {
                 ActionId = HotkeyFull,
                 Combination = Settings.FullScreenHotkey,
                 Description = "截图：全屏截图",
             },
-            new HotkeyDeclaration
-            {
-                ActionId = HotkeyScroll,
-                Combination = Settings.ScrollHotkey,
-                Description = "截图：滚动截长图",
-            },
-            new HotkeyDeclaration
+            new()
             {
                 ActionId = HotkeyOcr,
                 Combination = Settings.OcrClipboardHotkey,
                 Description = "截图：识别剪贴板图片文字",
             },
-        ]).ConfigureAwait(true);
+        };
+
+        // 暂不可用的功能不注册热键：注册了也只会白白占住一个组合键，还会在
+        // 工具箱热键页里显示成一个"能用的"功能
+        if (ScrollCaptureAvailable)
+        {
+            declarations.Insert(2, new HotkeyDeclaration
+            {
+                ActionId = HotkeyScroll,
+                Combination = Settings.ScrollHotkey,
+                Description = "截图：滚动截长图",
+            });
+        }
+
+        HotkeyResults = await _context.DeclareHotkeysAsync(declarations).ConfigureAwait(true);
 
         ReportHotkeyFailures();
     }
@@ -178,7 +190,13 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
     [
         new TrayMenuItem { Id = MenuRegion, Text = "区域截图" },
         new TrayMenuItem { Id = MenuFull, Text = "全屏截图" },
-        new TrayMenuItem { Id = MenuScroll, Text = "滚动截长图" },
+        new TrayMenuItem
+        {
+            Id = MenuScroll,
+            Text = ScrollCaptureAvailable ? "滚动截长图" : "滚动截长图（暂不可用）",
+            Enabled = ScrollCaptureAvailable,
+            ToolTip = ScrollCaptureAvailable ? null : "该功能暂不可用：目前无法自动滚动目标页面，只能截到首屏",
+        },
         new TrayMenuItem { Id = MenuOcrClipboard, Text = "识别剪贴板图片文字" },
         new TrayMenuItem { Id = "sep1", Kind = TrayMenuItemKind.Separator },
         new TrayMenuItem
@@ -302,6 +320,16 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
     private async Task StartCaptureAsync(CaptureMode mode)
     {
+        if (mode == CaptureMode.Scroll && !ScrollCaptureAvailable)
+        {
+            // 兜底：热键已不再注册，但旧快捷键、--menu-invoke 或残留的菜单项仍可能触发
+            AppLog.Write("滚动截长图暂不可用，忽略本次请求");
+            await _context.NotifyAsync("滚动截长图暂不可用",
+                "该功能暂时不可用（目前无法自动滚动目标页面，只能截到首屏）。请改用区域截图或全屏截图。")
+                .ConfigureAwait(true);
+            return;
+        }
+
         if (_captureInProgress)
         {
             AppLog.Write("已有截图流程在进行中，忽略本次请求");
@@ -821,6 +849,7 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
 
         _settingsWindow = new ScreenshotSettingsWindow(
             Settings,
+            canScroll: ScrollCaptureAvailable,
             onChanged: () => SettingsStore.Save(Settings),
             onHotkeysChanged: async () =>
             {

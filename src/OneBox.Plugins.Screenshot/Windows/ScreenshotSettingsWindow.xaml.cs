@@ -12,15 +12,19 @@ namespace OneBox.Plugins.Screenshot.Windows;
 public partial class ScreenshotSettingsWindow : Window
 {
     private readonly ScreenshotSettings _settings;
+    private readonly bool _canScroll;
     private readonly Action _onChanged;
     private readonly Func<Task> _onHotkeysChanged;
     private HotkeyRecorder? _recorder;
     private bool _loading = true;
 
-    public ScreenshotSettingsWindow(ScreenshotSettings settings, Action onChanged, Func<Task> onHotkeysChanged)
+    /// <param name="canScroll">滚动截长图当前是否可用；不可用时该组参数与热键只展示、不生效。</param>
+    public ScreenshotSettingsWindow(ScreenshotSettings settings, bool canScroll,
+        Action onChanged, Func<Task> onHotkeysChanged)
     {
         InitializeComponent();
         _settings = settings;
+        _canScroll = canScroll;
         _onChanged = onChanged;
         _onHotkeysChanged = onHotkeysChanged;
 
@@ -54,13 +58,19 @@ public partial class ScreenshotSettingsWindow : Window
         WheelHint.Text = $"从一格起步，自动调整；运行上限 {Math.Clamp(_settings.ScrollWheelNotches, 1, 6)} 格";
         MaxHeightBox.Text = _settings.ScrollMaxHeight.ToString();
 
+        // 暂不可用的功能：参数区与热键按钮只展示，不允许改（改了也不生效，只会误导）
+        ScrollSection.IsEnabled = _canScroll;
+        ScrollUnavailableHint.Visibility = _canScroll ? Visibility.Collapsed : Visibility.Visible;
+        ScrollHotkeyLabel.Text = _canScroll ? "滚动截长图" : "滚动截长图（暂不可用）";
+        ScrollHotkeyButton.IsEnabled = _canScroll;
+
         LoadOcrLanguages();
         StripSpacesCheck.IsChecked = _settings.OcrStripCjkSpaces;
         EnhanceCheck.IsChecked = _settings.OcrEnhanceImage;
 
         RegionHotkeyButton.Content = _settings.RegionHotkey;
         FullHotkeyButton.Content = _settings.FullScreenHotkey;
-        ScrollHotkeyButton.Content = _settings.ScrollHotkey;
+        ScrollHotkeyButton.Content = _canScroll ? _settings.ScrollHotkey : "暂不可用";
         OcrHotkeyButton.Content = _settings.OcrClipboardHotkey;
 
         DataDirText.Text = $"数据目录：{AppPaths.DataDirectory}";
@@ -290,7 +300,7 @@ public partial class ScreenshotSettingsWindow : Window
     {
         RegionHotkeyButton.Content = _settings.RegionHotkey;
         FullHotkeyButton.Content = _settings.FullScreenHotkey;
-        ScrollHotkeyButton.Content = _settings.ScrollHotkey;
+        ScrollHotkeyButton.Content = _canScroll ? _settings.ScrollHotkey : "暂不可用";
         OcrHotkeyButton.Content = _settings.OcrClipboardHotkey;
     }
 

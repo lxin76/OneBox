@@ -18,7 +18,6 @@ public static class SettingsSchema
     // 设置键。用常量而非字面量，避免声明与应用两处写错拼写。
     public const string KeyPinned = "pinned";
     public const string KeyNoActivate = "noActivate";
-    public const string KeyAutoPaste = "autoPaste";
     public const string KeyFontSize = "fontSize";
     public const string KeyWordWrap = "wordWrap";
     public const string KeyMaxTextLength = "maxTextLength";
@@ -47,16 +46,6 @@ public static class SettingsSchema
             Group = GroupWindow,
             Description = "点击窗口不打断当前正在编辑的软件；点进文本框时会临时取得焦点，离开后自动归还。",
             Value = JsonSerializer.SerializeToElement(settings.NoActivate),
-            DefaultValue = JsonSerializer.SerializeToElement(true),
-        },
-        new SettingDescriptor
-        {
-            Key = KeyAutoPaste,
-            Label = "复制后自动粘贴",
-            Kind = SettingKind.Bool,
-            Group = GroupEdit,
-            Description = "复制文本到剪贴板后，自动模拟 Ctrl+V 粘贴到前台窗口。",
-            Value = JsonSerializer.SerializeToElement(settings.AutoPaste),
             DefaultValue = JsonSerializer.SerializeToElement(true),
         },
         new SettingDescriptor
@@ -107,9 +96,6 @@ public static class SettingsSchema
 
             case KeyNoActivate:
                 return SetBool(() => settings.NoActivate, v => settings.NoActivate = v, value);
-
-            case KeyAutoPaste:
-                return SetBool(() => settings.AutoPaste, v => settings.AutoPaste = v, value);
 
             case KeyWordWrap:
                 return SetBool(() => settings.WordWrap, v => settings.WordWrap = v, value);
