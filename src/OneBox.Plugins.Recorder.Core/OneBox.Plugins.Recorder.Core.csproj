@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OneBox.Plugins.Recorder.Core</AssemblyName>
+    <RootNamespace>OneBox.Plugins.Recorder.Core</RootNamespace>
+    <Description>录屏插件的纯逻辑：设置声明、画质与体积估算、监视器布局、文件名。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

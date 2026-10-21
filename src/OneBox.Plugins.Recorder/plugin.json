@@ -1,0 +1,9 @@
+{
+  "id": "recorder",
+  "name": "录屏",
+  "version": "1.0.0",
+  "description": "轻量录屏：全屏或选区录制，可选系统声音/麦克风，MP4 体积小。",
+  "author": "OneBox",
+  "entry": "OneBox.Plugins.Recorder.exe",
+  "protocolVersion": 1
+}

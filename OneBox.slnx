@@ -11,6 +11,8 @@
     <Project Path="src/OneBox.Plugins.QuickNote/OneBox.Plugins.QuickNote.csproj" />
     <Project Path="src/OneBox.Plugins.Screenshot/OneBox.Plugins.Screenshot.csproj" />
     <Project Path="src/OneBox.Plugins.Screenshot.Core/OneBox.Plugins.Screenshot.Core.csproj" />
+    <Project Path="src/OneBox.Plugins.Recorder/OneBox.Plugins.Recorder.csproj" />
+    <Project Path="src/OneBox.Plugins.Recorder.Core/OneBox.Plugins.Recorder.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/OneBox.Tests/OneBox.Tests.csproj" />

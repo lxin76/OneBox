@@ -9,11 +9,12 @@ OneBox 图标生成器：平台 + 各插件的矢量造型 -> 多尺寸 ICO / PN
        在 16px 上连半个像素都不到，必然糊；这里按 512 画布上的实际像素定宽度
     2) 造型按 alpha 包围盒自动放大并居中，占满画幅（小图标的通行做法）
 
-四枚图标的造型差异：
+图标造型差异：
   platform   等轴测立方体 + 顶面插槽        —— 宿主是承载各小工具的容器
   textpin    文本卡片 + 右上角图钉           —— 置顶文本，图钉表示"钉在最上层"
   quicknote  折角便签 + 镂空闪电            —— 快速便签
   screenshot 四角取景框 + 中心准星圆环       —— 截图
+  recorder   显示器轮廓 + 红色录制圆点        —— 录屏
 """
 import io
 import math
@@ -275,6 +276,33 @@ def draw_screenshot(r):
     return rgb, alpha, hex2rgb("#9E7BFF")
 
 
+def draw_recorder(r):
+    """录屏：显示器轮廓 + 中心红色录制圆点 + 底座。
+
+    小尺寸下去掉底座、收细描边并缩小红点：细线框和横线在 16px 会断成一截一截，
+    只留「屏幕 + 红点」的剪影最清楚。
+    """
+    d = r.d
+    frame = (255, 214, 214, 255)
+    dot = (255, 82, 82, 255)
+
+    if r.small:
+        # 16px 下不再画底座：横线会与屏幕轮廓糊成一团；只留「屏幕 + 红点」，
+        # 并收细描边、缩小红点，保证两者之间仍有空隙。
+        d.rounded_rectangle(r.box(190, 300, 834, 690), radius=r.p(64),
+                            outline=frame, width=r.stroke(36))
+        d.ellipse(r.box(414, 378, 610, 574), fill=dot)
+    else:
+        d.rounded_rectangle(r.box(236, 286, 788, 654), radius=r.p(58),
+                            outline=frame, width=r.stroke(34))
+        d.ellipse(r.box(392, 350, 632, 590), fill=dot)
+        d.line(r.pts([(512, 654), (512, 748)]), fill=frame, width=r.stroke(30))
+        d.line(r.pts([(370, 790), (654, 790)]), fill=frame, width=r.stroke(30))
+
+    rgb, alpha = to_np(r.im)
+    return rgb, alpha, hex2rgb("#FF6B6B")
+
+
 def draw_generic(r):
     """通用插件占位图标：芯片造型（第三方插件未声明图标时使用）。"""
     d = r.d
@@ -317,6 +345,9 @@ SPECS = {
     "screenshot": dict(fn=draw_screenshot,
                        deep=hex2rgb("#261D44"), shallow=hex2rgb("#100C1E"),
                        glow=hex2rgb("#5B3FB0")),
+    "recorder": dict(fn=draw_recorder,
+                     deep=hex2rgb("#3A1A22"), shallow=hex2rgb("#180A0E"),
+                     glow=hex2rgb("#B0303C")),
     "generic": dict(fn=draw_generic,
                     deep=hex2rgb("#2B313F"), shallow=hex2rgb("#12151C"),
                     glow=hex2rgb("#3E4658")),
@@ -328,6 +359,7 @@ DESTINATIONS = {
     "textpin": r"src\OneBox.Plugins.TextPin\Assets\app.ico",
     "quicknote": r"src\OneBox.Plugins.QuickNote\Assets\app.ico",
     "screenshot": r"src\OneBox.Plugins.Screenshot\Assets\app.ico",
+    "recorder": r"src\OneBox.Plugins.Recorder\Assets\app.ico",
     "generic": r"src\OneBox.Host\Assets\plugin-generic.ico",
 }
 

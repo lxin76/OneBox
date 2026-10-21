@@ -10,6 +10,7 @@ OneBox.exe（宿主：托盘 + 工具箱 + 热键/托盘/设置/日志/崩溃重
        textpin/    置顶文本
        quicknote/  快速便签（示例插件，也是写新插件的模板）
        screenshot/ 截图
+       recorder/   录屏
 ```
 
 ## 平台特性
@@ -34,13 +35,14 @@ OneBox.exe（宿主：托盘 + 工具箱 + 热键/托盘/设置/日志/崩溃重
 
 ## 内置小工具
 
-平台随宿主分发三个小工具（位于 `plugins/`），都可在工具箱里启用/禁用；内置小工具不可卸载，只能禁用。
+平台随宿主分发四个小工具（位于 `plugins/`），都可在工具箱里启用/禁用；内置小工具不可卸载，只能禁用。
 
 | 小工具 | 插件 id | 简介 | 详细文档 |
 | --- | --- | --- | --- |
 | 置顶文本 | `textpin` | 常驻置顶的纯文本框，随手记与暂存纯文本；复制粘贴用系统原生 Ctrl+C / Ctrl+V，另可一键抓取选中文字置顶，**不监听剪贴板** | [README](src/OneBox.Plugins.TextPin/README.md) |
 | 快速便签 | `quicknote` | 热键呼出一个置顶便签窗，内容自动保存；同时是编写新小工具的模板 | [README](src/OneBox.Plugins.QuickNote/README.md) |
 | 截图 | `screenshot` | 区域/全屏截图（滚动截长图暂不可用），贴图置顶不被遮挡、贴回原位；贴图框选/箭头/文字标注与撤销；另存为保存，双引擎离线文字识别与划选取字 | [README](src/OneBox.Plugins.Screenshot/README.md) |
+| 录屏 | `recorder` | 全屏/选区录制，可选系统声音与麦克风；画质从省空间到原始分辨率，停止后可选择是否压缩保存 | [README](src/OneBox.Plugins.Recorder/README.md) |
 
 > 想自己写一个小工具，从[快速便签](src/OneBox.Plugins.QuickNote/README.md)照搬即可，接口见下面的[写一个小工具](#写一个小工具)。
 
@@ -78,6 +80,7 @@ OneBox.exe --settings    启动并打开设置中心
 置顶文本 ▸   ← 每个小工具一层，标题带它自己的图标，具体项由小工具自己声明
 快速便签 ▸
 截图 ▸
+录屏 ▸
 ──────────────
 退出 OneBox
 ```
@@ -286,6 +289,8 @@ src/OneBox.Plugins.TextPin.Core/ 置顶文本的纯逻辑库（文本规范化�
 src/OneBox.Plugins.QuickNote/      示例小工具，兼作模板
 src/OneBox.Plugins.Screenshot/      截图小工具（区域/全屏截图、贴图置顶、OCR、划选取字；滚动截长图暂不可用）
 src/OneBox.Plugins.Screenshot.Core/ 截图的纯逻辑库（文件名、滚动拼接、文本整理、OCR 版面与选区，可单测）
+src/OneBox.Plugins.Recorder/        录屏小工具（全屏/选区、系统声音与麦克风、悬浮控制条、小体积 MP4）
+src/OneBox.Plugins.Recorder.Core/   录屏的纯逻辑库（画质与体积估算、监视器布局、文件名、设置声明，可单测）
 tests/OneBox.Tests/                单元测试
 tools/icons/                       图标生成器（造型、尺寸策略、检查图）
 ```
@@ -343,6 +348,12 @@ data/settings.json        宿主设置
 - **右键菜单走注册表而不是 shell 扩展**：这里只要一个静态菜单项，注册表就够，不必往资源管理器里塞一个常驻 DLL（那种扩展一出问题会拖累整个资源管理器）。菜单项点击只能执行命令行，于是它再启动一次 `OneBox.exe --toolbox`，由单实例闸门转交给正在运行的实例
 - **右键菜单不留空壳容器**：早期版本在里面放了一个只有子菜单、本身没有命令的「OneBox 小工具」——点它不会有任何动作，用户第一下必然点空。现在只留一个能直接点的「OneBox 工具箱」，各小工具的入口都收在工具箱里
 - **`--menu-invoke` 通道保留**：`OneBox.exe --menu-invoke <插件> <菜单项>` 可以让人用快捷方式或脚本直接触发某个小工具的菜单项。宿主刚启动、插件还没声明出该项时，请求会先记下来等它声明完再补做，而不是丢了
+- **录屏默认体积优先，也可先录原画质再压缩**：默认 10 fps、550 kbps、最大宽度 960；设置里还有「原始分辨率」档，码率按屏幕像素 × 帧率自动计算。停止后弹出保存选择：保持原画质，或按省空间/标准/清晰转码成更小的 MP4
+- **压缩复用系统转码器**：保存时压缩走 `Windows.Media.Transcoding`，不额外带 ffmpeg；压缩档位只提供比原画面更小的尺寸，避免把已压缩的画面再放大。代价是插件需要 Windows SDK 投影，框架依赖发布后 exe 约 26 MB
+- **压缩成功后默认不保留原始文件**：原始文件只作为转码输入，成功后删除；保存对话框里可以勾选「压缩成功后保留原始文件」，转码失败或取消时原始文件一律保留
+- **固定帧率保证成片时长**：Windows.Graphics.Capture 只在画面变化时出帧，若按真实帧时间戳写文件，静态画面会让成片明显短于实际录制时间。录屏插件开启固定帧率，由编码器按时间轴补帧
+- **控制条不进画面**：录制开始前把悬浮控制条的窗口句柄交给录屏库的 `SetExcludeFromCapture`，即使它停在录制区域上也不会出现在成片里
+- **混合模式程序集排到单文件包外**：录屏后端是 C++/CLI 程序集，既不能从单文件包内直接加载，也不适合让整个运行时自解压；插件项目给它加 `ExcludeFromSingleFile`，发布时与 exe 并排放在插件目录里
 
 ## 开发
 
@@ -373,7 +384,7 @@ dotnet run --project src/OneBox.Host
 | `publish-self-contained.ps1` | `publish/self-contained/` | 自包含，内置 .NET 8 运行时，拷贝即用；体积大 |
 | `publish-framework-dependent.ps1` | `publish/framework-dependent/` | 框架依赖，体积小；目标机器须预装 .NET 8 桌面运行时 |
 
-两种模式都把宿主与每个插件各自整合成**单个 exe**，产物布局完全一致：宿主一个 exe，每个插件目录一个 exe 加一个 `plugin.json`。
+两种模式都把宿主与每个插件打成**单文件 exe**，产物布局基本一致：宿主一个 exe，每个插件目录一个 exe 加一个 `plugin.json`。录屏插件是唯一例外：它的录屏后端是 C++/CLI 混合程序集，不能进单文件包，因此该插件目录里还会多一个约 1.2 MB 的 `ScreenRecorderLib.dll`。
 
 ```powershell
 # 自包含发布（推荐分发用）
@@ -389,7 +400,7 @@ dotnet run --project src/OneBox.Host
 .\publish-framework-dependent.ps1 -Plugins quicknote
 ```
 
-产物布局：`<输出目录>/OneBox.exe` 与 `<输出目录>/plugins/<id>/`（每个小工具的 exe 与 `plugin.json`）。插件由 `src/OneBox.Plugins.*` 自动发现（`*.Core` 纯逻辑库除外），插件 id 取自各自的 `plugin.json`，新增小工具无需改动脚本。
+产物布局：`<输出目录>/OneBox.exe` 与 `<输出目录>/plugins/<id>/`（每个小工具的 exe 与 `plugin.json`；录屏插件另带 `ScreenRecorderLib.dll`）。插件由 `src/OneBox.Plugins.*` 自动发现（`*.Core` 纯逻辑库除外），插件 id 取自各自的 `plugin.json`，新增小工具无需改动脚本。
 
 > 默认会先结束正在运行的 OneBox 及相关插件进程，避免运行中的实例锁定 exe 导致覆盖失败；需要保留进程时加 `-NoStop`。框架依赖脚本在本机缺少对应桌面运行时时会给出警告。
 
@@ -399,6 +410,9 @@ dotnet run --project src/OneBox.Host
 - 全屏游戏/独占全屏可能拦截注入
 - 同一个全局热键只能被一个程序注册；被其他软件占用时该热键不生效（工具箱的热键页会列出）
 - 小工具需要与宿主协议版本一致（`protocolVersion`）；不兼容的插件会被标记为损坏而不会被启动
+- 录屏依赖 Windows 自带的 Media Foundation 编码器与 VC++ 2015-2022 运行库；缺少运行库时插件启动或录制会失败（日志里有明确报错）。受 DRM 保护的画面/独占全屏游戏可能录成黑屏
+- 停止后的压缩是二次转码，耗时随视频长度增加；压缩成功后默认删除原始文件，可在保存对话框里改为保留
+- 区域录制一次只录一块屏幕：选区跨屏时取重叠面积最大的那块，其余部分被裁掉
 
 ## License
 

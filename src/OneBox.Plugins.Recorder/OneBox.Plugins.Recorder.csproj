@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- 带 Windows SDK 版本的 TFM 才能使用 Windows.Media.Transcoding（停止后压缩） -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>OneBox.Plugins.Recorder</AssemblyName>
+    <RootNamespace>OneBox.Plugins.Recorder</RootNamespace>
+    <Description>OneBox 轻量录屏小工具：全屏/选区、系统声音与麦克风、小体积 MP4。</Description>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- ScreenRecorderLib 是 x64 的 C++/CLI 混合程序集，进程必须按 x64 构建 -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- 不复制三方包的 .pdb/.xml：录制库的 pdb 有 15 MB，发布会白白撑大插件目录 -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 包里的 targets 依赖 $(Platform) 必须是 x64，整解决方案（AnyCPU）构建时会报错；
+         这里跳过它的 targets，直接按包路径引用 x64 程序集。 -->
+    <PackageReference Include="ScreenRecorderLib" Version="7.0.1" ExcludeAssets="build" GeneratePathProperty="true" />
+    <Reference Include="ScreenRecorderLib">
+      <HintPath>$(PkgScreenRecorderLib)\build\x64\ScreenRecorderLib.dll</HintPath>
+      <Private>true</Private>
+      <!-- C++/CLI 混合程序集不能进单文件包；排到 exe 旁边，加载稳定，
+           也避免自包含发布时把整个运行时解压到临时目录 -->
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OneBox.Abstractions\OneBox.Abstractions.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk\OneBox.Plugin.Sdk.csproj" />
+    <ProjectReference Include="..\OneBox.Plugin.Sdk.Wpf\OneBox.Plugin.Sdk.Wpf.csproj" />
+    <ProjectReference Include="..\OneBox.Plugins.Recorder.Core\OneBox.Plugins.Recorder.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 窗口 Icon 用 pack 资源；列表图标由宿主直接从 exe 的嵌入图标里取 -->
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>

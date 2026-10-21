@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\OneBox.Plugins.TextPin.Core\OneBox.Plugins.TextPin.Core.csproj" />
     <ProjectReference Include="..\..\src\OneBox.Plugins.TextPin\OneBox.Plugins.TextPin.csproj" />
     <ProjectReference Include="..\..\src\OneBox.Plugins.Screenshot.Core\OneBox.Plugins.Screenshot.Core.csproj" />
+    <ProjectReference Include="..\..\src\OneBox.Plugins.Recorder.Core\OneBox.Plugins.Recorder.Core.csproj" />
   </ItemGroup>
 
 </Project>
