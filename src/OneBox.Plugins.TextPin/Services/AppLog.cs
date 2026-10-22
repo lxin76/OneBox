@@ -1,30 +1,12 @@
-using System.IO;
-using OneBox.Plugins.TextPin.Core;
+using OneBox.Plugin.Sdk.Logging;
 
 namespace OneBox.Plugins.TextPin.Services;
 
 /// <summary>
-/// 插件本地诊断日志。正常运行时插件日志通过宿主统一落盘（PluginContext.LogAsync），
-/// 这里额外写一份本地文件，便于宿主未连接时排障。
+/// 插件日志适配层：真正的写入由 SDK 的 <see cref="PluginLog"/> 负责，
+/// 每个插件只有一个 data/logs/plugin-&lt;id&gt;.log（10 MB 上限，写满覆盖最旧内容）。
 /// </summary>
 public static class AppLog
 {
-    private static readonly object Sync = new();
-
-    public static void Write(string message)
-    {
-        try
-        {
-            lock (Sync)
-            {
-                File.AppendAllText(
-                    Path.Combine(AppPaths.DataDirectory, "textpin.log"),
-                    $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
-            }
-        }
-        catch
-        {
-            // 日志写入失败时忽略，避免影响主流程
-        }
-    }
+    public static void Write(string message) => PluginLog.Write(message);
 }

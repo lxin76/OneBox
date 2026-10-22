@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OneBox.Abstractions;
 using OneBox.Abstractions.Theming;
+using OneBox.Plugin.Sdk.Logging;
 
 namespace OneBox.Plugin.Sdk;
 
@@ -160,9 +161,15 @@ public sealed class PluginContext : IAsyncDisposable
     public Task SetStatusAsync(string text)
         => PostAsync(IpcTypes.Status, new StatusPayload { Text = text });
 
-    /// <summary>上报日志到宿主统一日志文件与工具箱日志面板。</summary>
+    /// <summary>
+    /// 上报日志给宿主，同时写入本插件的唯一日志文件（data/logs/plugin-&lt;id&gt;.log）。
+    /// 宿主不再重复落盘；保留 IPC 上报是为了协议兼容与将来可能的界面展示。
+    /// </summary>
     public Task LogAsync(LogLevel level, string message)
-        => PostAsync(IpcTypes.Log, new LogPayload { Level = level, Message = message });
+    {
+        PluginLog.Write($"[{level}] {message}");
+        return PostAsync(IpcTypes.Log, new LogPayload { Level = level, Message = message });
+    }
 
     public Task LogDebugAsync(string message) => LogAsync(LogLevel.Debug, message);
     public Task LogInfoAsync(string message) => LogAsync(LogLevel.Info, message);
@@ -170,7 +177,11 @@ public sealed class PluginContext : IAsyncDisposable
     public Task LogErrorAsync(string message) => LogAsync(LogLevel.Error, message);
 
     /// <summary>内部同步日志（不等待发送完成，用于异常路径）。</summary>
-    internal void LogInfo(string message) => _ = SafePostAsync(IpcTypes.Log, new LogPayload { Level = LogLevel.Info, Message = message });
+    internal void LogInfo(string message)
+    {
+        PluginLog.Write($"[{LogLevel.Info}] {message}");
+        _ = SafePostAsync(IpcTypes.Log, new LogPayload { Level = LogLevel.Info, Message = message });
+    }
 
     /// <summary>请求宿主弹出气泡通知。</summary>
     public Task NotifyAsync(string title, string message, LogLevel level = LogLevel.Info)

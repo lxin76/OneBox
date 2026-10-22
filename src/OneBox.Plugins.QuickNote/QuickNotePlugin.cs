@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using OneBox.Abstractions;
 using OneBox.Plugin.Sdk;
+using OneBox.Plugin.Sdk.Logging;
 using OneBox.Plugin.Sdk.Wpf;
 
 namespace OneBox.Plugins.QuickNote;
@@ -70,7 +71,7 @@ public sealed class QuickNotePlugin : IAsyncDisposable
 
         ApplyHotkeyResults(results);
         await _context.ReadyAsync("快速便签", BuildStatusText());
-        await _context.LogInfoAsync($"快速便签已启动（数据目录 {_context.DataDirectory}）");
+        PluginLog.Write($"快速便签已启动（数据目录 {_context.DataDirectory}）");
     }
 
     /// <summary>宿主推送了最新的热键注册结果（用户改键，或注册状态变化）。</summary>

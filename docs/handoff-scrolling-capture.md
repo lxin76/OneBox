@@ -17,8 +17,7 @@
 - 截图插件：`src\OneBox.Plugins.Screenshot`（WPF），纯逻辑在 `src\OneBox.Plugins.Screenshot.Core`
 - 测试：`tests\OneBox.Tests`（xUnit）
 - 发布脚本：`publish-framework-dependent.ps1`，产物在 `publish\framework-dependent`
-- 插件的诊断日志（**排查主依据**）：`publish\framework-dependent\data\plugin-state\screenshot\screenshot.log`
-- 进程日志：`publish\framework-dependent\data\logs\plugin-screenshot.log`
+- 插件日志（**排查主依据**，进程内同步写入，10 MB 上限、写满覆盖最旧）：`publish\framework-dependent\data\logs\plugin-screenshot.log`
 
 ### 已知环境问题（会影响你）
 
@@ -147,7 +146,7 @@ internal struct INPUT
 
 ## 附：验证清单（接手后照着跑）
 
-- [ ] 读 `publish\framework-dependent\data\plugin-state\screenshot\screenshot.log` 最新段落
+- [ ] 读 `publish\framework-dependent\data\logs\plugin-screenshot.log` 最新段落
 - [ ] 确认拼接器测试仍全绿
 - [ ] 做第八节第 2 条的对照实验，记录哪种方式能滚动
 - [ ] 修 `ShowPin` 的 PresentationSource 异常

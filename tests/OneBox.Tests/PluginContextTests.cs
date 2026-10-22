@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using OneBox.Abstractions;
 using OneBox.Plugin.Sdk;
+using OneBox.Plugin.Sdk.Logging;
 
 namespace OneBox.Tests;
 
@@ -30,6 +31,33 @@ public class PluginContextTests
         };
         var context = new PluginContext(plugin, hello);
         return (host, context);
+    }
+
+    [Fact]
+    public async Task LogAsync_WritesToSinglePluginLogFile()
+    {
+        // 插件只调 _context.LogXxxAsync 时，日志也必须落到自己唯一的文件里，
+        // 不能因为宿主不再重复落盘就丢失。
+        var directory = Path.Combine(Path.GetTempPath(), $"onebox-plugin-log-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            PluginLog.Initialize(directory, "demo");
+
+            var (_, context) = CreateSession();
+            await using var contextScope = context;
+
+            await context.LogInfoAsync("hello");
+
+            var path = Path.Combine(directory, "plugin-demo.log");
+            Assert.True(File.Exists(path));
+            Assert.Contains("[Info] hello", File.ReadAllText(path));
+            Assert.Single(Directory.GetFiles(directory));
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { }
+        }
     }
 
     [Fact]

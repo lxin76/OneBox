@@ -1,3 +1,5 @@
+using OneBox.Plugin.Sdk.Logging;
+
 namespace OneBox.Plugin.Sdk;
 
 /// <summary>
@@ -66,6 +68,11 @@ public static class OneBoxPlugin
             }
 
             await using var context = new PluginContext(connection, hello, syncContext);
+
+            // 每个插件只有一个日志：宿主下发的 LogDirectory 下的 plugin-<id>.log。
+            // 在这里绑定，保证插件主体、IPC 上报日志都落到同一个文件。
+            PluginLog.Initialize(hello.LogDirectory, hello.PluginId);
+
             connection.Closed += error => context.RaiseConnectionClosed(error);
 
             await context.LogInfoAsync($"已连接宿主 {hello.HostVersion}（协议 {hello.ProtocolVersion}）")

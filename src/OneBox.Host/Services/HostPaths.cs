@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using OneBox.Abstractions;
+using OneBox.Abstractions.Logging;
 
 namespace OneBox.Host.Services;
 
@@ -86,11 +87,11 @@ public static class HostPaths
     }
 
     /// <summary>宿主自身日志文件。</summary>
-    public static string HostLogPath => Path.Combine(LogDirectory, "host.log");
+    public static string HostLogPath => Path.Combine(LogDirectory, LogPaths.HostLogFileName);
 
-    /// <summary>插件日志文件（每个插件一个）。</summary>
+    /// <summary>插件日志文件（每个插件一个，由插件进程自己写入）。</summary>
     public static string PluginLogPath(string pluginId)
-        => Path.Combine(LogDirectory, $"plugin-{pluginId}.log");
+        => LogPaths.PluginLogFile(LogDirectory, pluginId);
 
     /// <summary>插件私有数据目录（首次访问时创建）。</summary>
     public static string PluginDataDirectory(string pluginId)

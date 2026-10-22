@@ -331,8 +331,8 @@ public sealed class PluginRuntime : IAsyncDisposable
                 break;
 
             case IpcTypes.Log:
-                if (envelope.GetPayload<LogPayload>() is { } log)
-                    HostLog.WritePlugin(_manifest.Id, log.Level.ToString(), log.Message);
+                // 插件日志由插件进程自己写入 data/logs/plugin-<id>.log；
+                // 这里不再重复落盘，保留分支以兼容协议（未知类型会告警）。
                 break;
 
             case IpcTypes.Notify:
@@ -554,7 +554,7 @@ public sealed class PluginRuntime : IAsyncDisposable
         _ = _connection!.RespondAsync(envelope.RequestId, true);
     }
 
-    /// <summary>把插件进程的 stdout/stderr 逐行转写到插件日志，便于诊断启动失败。</summary>
+    /// <summary>把插件进程的 stdout/stderr 逐行转写到 host.log（带插件标签），便于诊断启动失败。</summary>
     private void CaptureProcessOutput(Process process, string pluginId)
     {
         TryCapture(process.StandardOutput, "stdout");

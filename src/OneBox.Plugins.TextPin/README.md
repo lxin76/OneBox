@@ -98,7 +98,8 @@
 |---|---|
 | `pinned.txt` | 置顶文本正文，**纯文本**，可直接用记事本打开、备份或替换 |
 | `settings.json` | 插件设置 |
-| `textpin.log` | 本地诊断日志（宿主日志另见 `data/logs/plugin-textpin.log`） |
+
+运行日志在 `data/logs/plugin-textpin.log`（10 MB 上限，写满覆盖最旧内容），由插件进程写入。
 
 ## 实现要点
 

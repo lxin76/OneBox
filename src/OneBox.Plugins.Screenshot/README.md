@@ -134,9 +134,7 @@
 |---|---|
 | `settings.json` | 本插件的设置 |
 | `shots/` | 默认截图保存目录，也是「另存为」对话框的初始目录；用户在对话框里另选位置时不会用到 |
-| `screenshot.log` | 插件本地诊断日志（宿主未连接时排障用） |
-
-宿主还会把本插件的运行日志写到 `data/logs/plugin-screenshot.log`。
+运行日志不在插件数据目录：本插件进程写到 `data/logs/plugin-screenshot.log`（10 MB 上限，写满覆盖最旧内容）。
 
 ## 实现要点
 

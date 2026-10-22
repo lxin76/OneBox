@@ -28,7 +28,7 @@
 |---|---|
 | `settings.json` | 便签正文（键 `note`），由宿主读写 |
 
-宿主运行日志在 `data/logs/plugin-quicknote.log`。
+插件运行日志在 `data/logs/plugin-quicknote.log`（10 MB 上限，写满覆盖最旧内容）。
 
 ## 作为模板：它演示了什么
 

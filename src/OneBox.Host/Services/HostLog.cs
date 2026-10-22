@@ -1,40 +1,23 @@
-using System.IO;
+using System.Collections.Concurrent;
+using OneBox.Abstractions.Logging;
 
 namespace OneBox.Host.Services;
 
-/// <summary>带轮转的轻量日志（宿主与插件共用），写入 %LOCALAPPDATA%\OneBox\logs。</summary>
+/// <summary>
+/// 宿主日志：单文件、10 MB 上限，写满后覆盖最旧内容（见 <see cref="LogFile"/>）。
+/// 插件自身的日志由插件进程写 data/logs/plugin-&lt;id&gt;.log；
+/// 这里只记录宿主事件，以及宿主观察到的插件生命周期事件（带 plugin:&lt;id&gt; 标签）。
+/// </summary>
 public static class HostLog
 {
-    private const long MaxBytes = 2 * 1024 * 1024;
-    private static readonly object Sync = new();
+    private static readonly ConcurrentDictionary<string, LogFile> Files = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>写宿主日志。</summary>
-    public static void Write(string message) => WriteTo(HostPaths.HostLogPath, "HOST", message);
+    /// <summary>写宿主日志（host.log）。</summary>
+    public static void Write(string message) => For(HostPaths.HostLogPath).Write("HOST", message);
 
-    /// <summary>写指定插件的日志。</summary>
+    /// <summary>把宿主观察到的插件事件写进 host.log，标记插件 id 与级别。</summary>
     public static void WritePlugin(string pluginId, string level, string message)
-        => WriteTo(HostPaths.PluginLogPath(pluginId), pluginId, $"[{level}] {message}");
+        => Write($"[plugin:{pluginId}] [{level}] {message}");
 
-    /// <summary>写入指定文件，超过上限时轮转为 .1 备份。</summary>
-    public static void WriteTo(string path, string tag, string message)
-    {
-        try
-        {
-            lock (Sync)
-            {
-                var info = new FileInfo(path);
-                if (info.Exists && info.Length > MaxBytes)
-                {
-                    var backup = path + ".1";
-                    File.Delete(backup);
-                    File.Move(path, backup);
-                }
-                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{tag}] {message}{Environment.NewLine}");
-            }
-        }
-        catch
-        {
-            // 日志写入失败不影响主流程
-        }
-    }
+    private static LogFile For(string path) => Files.GetOrAdd(path, static p => new LogFile(p));
 }

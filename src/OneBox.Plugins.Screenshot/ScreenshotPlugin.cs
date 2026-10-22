@@ -74,7 +74,6 @@ public sealed class ScreenshotPlugin : IAsyncDisposable
         AppPaths.Initialize(_context.DataDirectory);
         Settings = SettingsStore.Load();
 
-        // 宿主未连接时的本地日志兜底
         AppLog.Write($"截图插件启动（数据目录 {AppPaths.DataDirectory}）");
 
         _context.HotkeyPressed += OnHotkeyPressed;
